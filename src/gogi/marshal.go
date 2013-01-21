@@ -77,10 +77,14 @@ gdouble read_double_variant(GVariant *variant) {
 	return value;
 }
 
-gchar *read_string_variant(GVariant *variant) {
+gchar *read_string_variant(GVariant *variant, const gchar *type) {
 	gchar *value;
-	g_variant_get(variant, "s", &value);
+	g_variant_get(variant, type, &value);
 	return value;
+}
+
+GVariant *get_array() {
+	return g_variant_new_strv(g_get_system_data_dirs(), -1);
 }
 */
 import "C"
@@ -95,39 +99,47 @@ import (
 // Try to read the pointer as a variant, which provides type information
 func ToGo(ptr C.gpointer) (interface{}, reflect.Kind) {
 	variant := C.to_variant(ptr)
-	typ := C.g_variant_get_type_string(variant)
+	typ := C.g_variant_get_type(variant)
+	typ_str := C.g_variant_type_dup_string(typ)
+	defer C.g_free(C.gpointer(typ_str))
 
-	switch GoString(typ) {
+	if (GoBool(C.g_variant_type_is_basic(typ))) {
+		// basic types
+		switch GoString(typ_str) {
 		case "b": // boolean
-			value := C.gboolean(C.int_from_pointer(C.read_variant(variant, typ)))
+			value := C.gboolean(C.int_from_pointer(C.read_variant(variant, typ_str)))
 			return GoBool(value), reflect.Bool
 		case "y": // byte
-			value := C.guint8(C.uint_from_pointer(C.read_variant(variant, typ)))
+			value := C.guint8(C.uint_from_pointer(C.read_variant(variant, typ_str)))
 			return GoUInt8(value), reflect.Uint8
 		case "n": // int16
-			value := C.gint16(C.int_from_pointer(C.read_variant(variant, typ)))
+			value := C.gint16(C.int_from_pointer(C.read_variant(variant, typ_str)))
 			return GoInt16(value), reflect.Int16
 		case "q": // uint16
-			value := C.guint16(C.uint_from_pointer(C.read_variant(variant, typ)))
+			value := C.guint16(C.uint_from_pointer(C.read_variant(variant, typ_str)))
 			return GoUInt16(value), reflect.Uint16
 		case "i", "h": // int32, handle
-			value := C.gint32(C.int_from_pointer(C.read_variant(variant, typ)))
+			value := C.gint32(C.int_from_pointer(C.read_variant(variant, typ_str)))
 			return GoInt32(value), reflect.Int32
 		case "u": // uint32
-			value := C.guint32(C.uint_from_pointer(C.read_variant(variant, typ)))
+			value := C.guint32(C.uint_from_pointer(C.read_variant(variant, typ_str)))
 			return GoUInt32(value), reflect.Uint32
 		case "x": // int64 (NOTE: this may not work correctly since gsize = unsigned long)
-			value := C.gint64(C.size_from_pointer(C.read_variant(variant, typ)))
+			value := C.gint64(C.size_from_pointer(C.read_variant(variant, typ_str)))
 			return GoInt64(value), reflect.Int64
 		case "t": // uint64
-			value := C.guint64(C.size_from_pointer(C.read_variant(variant, typ)))
+			value := C.guint64(C.size_from_pointer(C.read_variant(variant, typ_str)))
 			return GoUInt64(value), reflect.Uint64
 		case "d": // double
 			value := C.read_double_variant(variant)
 			return GoDouble(value), reflect.Float64
-		case "s": // string
-			value := C.read_string_variant(variant)
+		case "s", "o", "g": // string, object path, or signature
+			value := C.read_string_variant(variant, typ_str)
 			return GoString(value), reflect.String
+		}
+	} else if (GoBool(C.g_variant_type_is_array(typ))) {
+		// arrays
+		// TODO: extract all values from the array
 	}
 	return nil, reflect.Invalid
 }
@@ -381,4 +393,7 @@ func GoToGSList(golist *list.List) *C.GSList {
 	}
 	gslist = C.g_slist_reverse(gslist)
 	return gslist
+}
+
+func Test() {
 }
