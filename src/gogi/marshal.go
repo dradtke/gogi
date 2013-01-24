@@ -4,6 +4,7 @@ package gogi
 #cgo pkg-config: glib-2.0
 #include <glib.h>
 #include <string.h>
+#include <stdio.h>
 
 GList *empty_glist = NULL;
 GSList *empty_gslist = NULL;
@@ -83,13 +84,38 @@ gchar *read_string_variant(GVariant *variant, const gchar *type) {
 	return value;
 }
 
-GVariant *get_array() {
-	return g_variant_new_strv(g_get_system_data_dirs(), -1);
+GList *read_array_variant(GVariant *variant) {
+	GList *result = NULL;
+	GVariantIter *iter = g_variant_iter_new(variant);
+
+	GVariant *item;
+	while ((item = g_variant_iter_next_value(iter)) != NULL) {
+		result = g_list_prepend(result, item);
+	}
+
+	g_variant_iter_free(iter);
+	result = g_list_reverse(result);
+	return result;
+}
+
+// --- Test Methods --- //
+
+// return an array of strings stuffed in a variant
+gpointer array_test() {
+	GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE("as"));
+	g_variant_builder_add(builder, "s", "hello");
+	g_variant_builder_add(builder, "s", "goodbye");
+
+	GVariant *variant = g_variant_new("as", builder);
+	g_variant_builder_unref(builder);
+
+	return variant;
 }
 */
 import "C"
 import (
 	"container/list"
+	"fmt"
 	"reflect"
 	//"unsafe"
 )
@@ -138,8 +164,12 @@ func ToGo(ptr C.gpointer) (interface{}, reflect.Kind) {
 			return GoString(value), reflect.String
 		}
 	} else if (GoBool(C.g_variant_type_is_array(typ))) {
-		// arrays
-		// TODO: extract all values from the array
+		l := GListToGo(C.read_array_variant(variant))
+		ar := make([]interface{}, l.Len())
+		for e, i := l.Front(), 0; e != nil; e, i = e.Next(), i+1 {
+			ar[i] = e.Value
+		}
+		return ar, reflect.Slice
 	}
 	return nil, reflect.Invalid
 }
@@ -395,5 +425,20 @@ func GoToGSList(golist *list.List) *C.GSList {
 	return gslist
 }
 
-func Test() {
+/* --- Test Methods --- */
+
+func ArrayTest() {
+	result, typ := ToGo(C.array_test())
+	if typ != reflect.Slice {
+		println("Found non-slice type in ArrayTest!")
+		return
+	}
+
+	dirs, ok := result.([]interface{})
+	if !ok {
+		println("Type assertion to []interface{} failed.")
+		return
+	}
+
+	fmt.Printf("%v\n", dirs)
 }
