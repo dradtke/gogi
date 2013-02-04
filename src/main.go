@@ -1,7 +1,18 @@
 package main
 
-import "gogi"
+import (
+	"gogi"
+	"fmt"
+)
 
 func main() {
-	gogi.ArrayTest()
+	gogi.Init()
+	//gogi.ArrayTest()
+	infos := gogi.GetInfos("GLib")
+	for _, info := range infos {
+		if info.Type == gogi.Function {
+			flags, _ := info.GetFunctionFlags()
+			fmt.Printf("%v\n", flags)
+		}
+	}
 }

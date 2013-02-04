@@ -3,113 +3,68 @@ package gogi
 /*
 #cgo pkg-config: glib-2.0
 #include <glib.h>
+#include <glib-object.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 GList *empty_glist = NULL;
 GSList *empty_gslist = NULL;
 
 // conversions
-gint int_from_pointer(gpointer p) { return GPOINTER_TO_INT(p); }
+gint32 int_from_pointer(gpointer p) { return GPOINTER_TO_INT(p); }
 gpointer pointer_from_int(gint i) { return GINT_TO_POINTER(i); }
-guint uint_from_pointer(gpointer p) { return GPOINTER_TO_UINT(p); }
+guint32 uint_from_pointer(gpointer p) { return GPOINTER_TO_UINT(p); }
 gpointer pointer_from_uint(guint i) { return GUINT_TO_POINTER(i); }
 gulong size_from_pointer(gpointer p) { return GPOINTER_TO_SIZE(p); }
 gpointer pointer_from_size(gulong i) { return GSIZE_TO_POINTER(i); }
 char *from_gchar(gchar *str) { return (char*)str; }
 gchar *to_gchar(char *str) { return (gchar*)str; }
-GVariant *to_variant(gpointer ptr) { return (GVariant*)ptr; }
 
-// general method for reading a variant into a gpointer
-gpointer read_variant(GVariant *variant, const gchar *type) {
-	if (!strcmp(type, "b")) {
-		// boolean
-		gboolean value;
-		g_variant_get(variant, type, &value);
-		return GINT_TO_POINTER(value);
-	} else if (!strcmp(type, "y")) {
-		// byte
-		guchar value;
-		g_variant_get(variant, type, &value);
-		return GINT_TO_POINTER(value);
-	} else if (!strcmp(type, "n")) {
-		// int16
-		gint16 value;
-		g_variant_get(variant, type, &value);
-		return GINT_TO_POINTER(value);
-	} else if (!strcmp(type, "q")) {
-		// uint16
-		guint16 value;
-		g_variant_get(variant, type, &value);
-		return GINT_TO_POINTER(value);
-	} else if (!strcmp(type, "i") || !strcmp(type, "h")) {
-		// int32, handle
-		gint32 value;
-		g_variant_get(variant, type, &value);
-		return GINT_TO_POINTER(value);
-	} else if (!strcmp(type, "u")) {
-		// uint32
-		guint32 value;
-		g_variant_get(variant, type, &value);
-		return GINT_TO_POINTER(value);
-	} else if (!strcmp(type, "x")) {
-		// int64
-		gint64 value;
-		g_variant_get(variant, type, &value);
-		return GINT_TO_POINTER(value);
-	} else if (!strcmp(type, "t")) {
-		// uint64
-		guint64 value;
-		g_variant_get(variant, type, &value);
-		return GINT_TO_POINTER(value);
-	} else if (!strcmp(type, "d")) {
-		// double
-		gdouble value;
-		g_variant_get(variant, type, &value);
-		return GINT_TO_POINTER(value);
-	} else {
-		return NULL;
-	}
+// array access
+gint array_length(GArray *array) {
+	printf("C array length is %d\n", array->len);
+	return array->len;
 }
 
-gdouble read_double_variant(GVariant *variant) {
-	gdouble value;
-	g_variant_get(variant, "d", &value);
-	return value;
+GValue *array_get(GArray *array, gint i) {
+	return &g_array_index(array, GValue, i);
 }
 
-gchar *read_string_variant(GVariant *variant, const gchar *type) {
-	gchar *value;
-	g_variant_get(variant, type, &value);
-	return value;
-}
-
-GList *read_array_variant(GVariant *variant) {
-	GList *result = NULL;
-	GVariantIter *iter = g_variant_iter_new(variant);
-
-	GVariant *item;
-	while ((item = g_variant_iter_next_value(iter)) != NULL) {
-		result = g_list_prepend(result, item);
-	}
-
-	g_variant_iter_free(iter);
-	result = g_list_reverse(result);
-	return result;
+// bitflag support
+gboolean and(gint flags, gint position) {
+	return flags & position;
 }
 
 // --- Test Methods --- //
 
-// return an array of strings stuffed in a variant
-gpointer array_test() {
-	GVariantBuilder *builder = g_variant_builder_new(G_VARIANT_TYPE("as"));
-	g_variant_builder_add(builder, "s", "hello");
-	g_variant_builder_add(builder, "s", "goodbye");
+static inline GValue *new_value(gpointer data, GType type) {
+	GValue *value = (GValue*)malloc(sizeof(GValue));
+	memset(value, 0, sizeof(GValue));
+	g_value_init(value, type);
+	switch (type) {
+		case G_TYPE_STRING:
+			g_value_set_string(value, data);
+			break;
+		default:
+			g_value_set_pointer(value, data);
+			break;
+	}
+	return value;
+}
 
-	GVariant *variant = g_variant_new("as", builder);
-	g_variant_builder_unref(builder);
+// return an array of strings stuffed in a gvalue
+GValue *array_test() {
+	GValue *item1 = new_value(g_strdup("hello"), G_TYPE_STRING);
+	GValue *item2 = new_value(g_strdup("world"), G_TYPE_STRING);
 
-	return variant;
+	GArray *array = g_array_sized_new(FALSE, TRUE, sizeof(gchar*), 2);
+	g_array_insert_val(array, 0, item1);
+	g_array_insert_val(array, 1, item2);
+
+	GValue *value = new_value(array, G_TYPE_POINTER);
+
+	return value;
 }
 */
 import "C"
@@ -117,80 +72,65 @@ import (
 	"container/list"
 	"fmt"
 	"reflect"
-	//"unsafe"
+	"unsafe"
 )
 
 /* -- Pointers -- */
 
-// Try to read the pointer as a variant, which provides type information
-func ToGo(ptr C.gpointer) (interface{}, reflect.Kind) {
-	variant := C.to_variant(ptr)
-	typ := C.g_variant_get_type(variant)
-	typ_str := C.g_variant_type_dup_string(typ)
-	defer C.g_free(C.gpointer(typ_str))
-
-	if (GoBool(C.g_variant_type_is_basic(typ))) {
-		// basic types
-		switch GoString(typ_str) {
-		case "b": // boolean
-			value := C.gboolean(C.int_from_pointer(C.read_variant(variant, typ_str)))
-			return GoBool(value), reflect.Bool
-		case "y": // byte
-			value := C.guint8(C.uint_from_pointer(C.read_variant(variant, typ_str)))
-			return GoUInt8(value), reflect.Uint8
-		case "n": // int16
-			value := C.gint16(C.int_from_pointer(C.read_variant(variant, typ_str)))
-			return GoInt16(value), reflect.Int16
-		case "q": // uint16
-			value := C.guint16(C.uint_from_pointer(C.read_variant(variant, typ_str)))
-			return GoUInt16(value), reflect.Uint16
-		case "i", "h": // int32, handle
-			value := C.gint32(C.int_from_pointer(C.read_variant(variant, typ_str)))
-			return GoInt32(value), reflect.Int32
-		case "u": // uint32
-			value := C.guint32(C.uint_from_pointer(C.read_variant(variant, typ_str)))
-			return GoUInt32(value), reflect.Uint32
-		case "x": // int64 (NOTE: this may not work correctly since gsize = unsigned long)
-			value := C.gint64(C.size_from_pointer(C.read_variant(variant, typ_str)))
-			return GoInt64(value), reflect.Int64
-		case "t": // uint64
-			value := C.guint64(C.size_from_pointer(C.read_variant(variant, typ_str)))
-			return GoUInt64(value), reflect.Uint64
-		case "d": // double
-			value := C.read_double_variant(variant)
-			return GoDouble(value), reflect.Float64
-		case "s", "o", "g": // string, object path, or signature
-			value := C.read_string_variant(variant, typ_str)
-			return GoString(value), reflect.String
-		}
-	} else if (GoBool(C.g_variant_type_is_array(typ))) {
-		l := GListToGo(C.read_array_variant(variant))
-		ar := make([]interface{}, l.Len())
-		for e, i := l.Front(), 0; e != nil; e, i = e.Next(), i+1 {
-			ar[i] = e.Value
-		}
-		return ar, reflect.Slice
+func ToGo(ptr *C.GValue) (interface{}, reflect.Kind) {
+	typ := GoString(C.g_type_name(ptr.g_type))
+	println("Type:", typ)
+	value := C.g_value_peek_pointer(ptr)
+	switch typ {
+		case "gchar", "gint8":
+			return GoInt8((C.gint8)(C.int_from_pointer(value))), reflect.Int8
+		case "guchar", "guint8":
+			return GoUInt8((C.guint8)(C.int_from_pointer(value))), reflect.Uint8
+		case "gboolean":
+			return GoBool((C.gboolean)(C.int_from_pointer(value))), reflect.Bool
+		case "gint", "gint32":
+			return GoInt32(C.int_from_pointer(value)), reflect.Int32
+		case "guint", "guint32":
+			return GoUInt32(C.uint_from_pointer(value)), reflect.Uint32
+		case "glong", "gint64": // ???: better way to do this than using gsize?
+			return GoLong((C.glong)(C.size_from_pointer(value))), reflect.Int64
+		case "gulong", "guint64":
+			return GoULong(C.size_from_pointer(value)), reflect.Uint64
+		case "gshort", "gint16":
+			return GoInt16((C.gint16)(C.int_from_pointer(value))), reflect.Int16
+		case "gushort", "guint16":
+			return GoUInt16((C.guint16)(C.int_from_pointer(value))), reflect.Uint16
+		case "gpointer":
+			return (unsafe.Pointer)(value), reflect.Ptr
+		case "gchararray":
+			return GoString((*C.gchar)(value)), reflect.String
 	}
-	return nil, reflect.Invalid
+	return (unsafe.Pointer)(value), reflect.Invalid
 }
 
 // Convert an arbitrary Go value into its C representation
 func ToGlib(data interface{}) C.gpointer {
 	value := reflect.ValueOf(data)
+	// TODO: fill this in
 	switch value.Kind() {
-	case reflect.Int:
-		i := GlibInt(data.(int))
-		return C.pointer_from_int(i)
-	case reflect.String:
-		gstr := GlibString(data.(string))
-		return C.gpointer(gstr)
+		case reflect.Int:
+			i := GlibInt(data.(int))
+			return C.pointer_from_int(i)
+		case reflect.String:
+			gstr := GlibString(data.(string))
+			return C.gpointer(gstr)
 	}
 	ptr := value.Pointer()
 	return C.gpointer(ptr)
 }
 
-func IntFromPointer(p C.gpointer) int {
-	return GoInt(C.int_from_pointer(p))
+func ToSlice(array *C.GArray) []interface{} {
+	length := GoInt(C.array_length(array))
+	result := make([]interface{}, length)
+	for i := 0; i < length; i++ {
+		result[i] = C.array_get(array, (C.gint)(i))
+	}
+	return result
 }
 
 /* -- Booleans -- */
@@ -384,11 +324,15 @@ func GlibString(str string) *C.gchar {
 func GListToGo(glist *C.GList) *list.List {
 	result := list.New()
 	for glist != C.empty_glist {
-		value, kind := ToGo(glist.data)
+		result.PushBack(glist.data)
+		glist = glist.next
+		/*
+		value, kind := ToGo((C.GValue)(glist.data))
 		if kind != reflect.Invalid {
 			result.PushBack(value)
 		}
 		glist = glist.next
+		*/
 	}
 	return result
 }
@@ -396,11 +340,13 @@ func GListToGo(glist *C.GList) *list.List {
 func GSListToGo(gslist *C.GSList) *list.List {
 	result := list.New()
 	for gslist != C.empty_gslist {
+		/*
 		value, kind := ToGo(gslist.data)
 		if kind != reflect.Invalid {
 			result.PushBack(value)
 		}
 		gslist = gslist.next
+		*/
 	}
 	return result
 }
@@ -425,15 +371,42 @@ func GoToGSList(golist *list.List) *C.GSList {
 	return gslist
 }
 
+func PopulateFlags(data interface{}, bits C.gint, flags []C.gint) {
+	value := reflect.ValueOf(data).Elem()
+	for i := range flags {
+		value.Field(i).SetBool(GoBool(C.and(bits, flags[i])))
+	}
+}
+
 /* --- Test Methods --- */
 
 func ArrayTest() {
 	result, typ := ToGo(C.array_test())
-	if typ != reflect.Slice {
-		println("Found non-slice type in ArrayTest!")
+	if typ != reflect.Ptr {
+		println("Found non-pointer type in ArrayTest!")
 		return
 	}
 
+	// ???: get gvalue to give us more information?
+	// we know it's an array, so convert it to one
+	dirs := ToSlice((*C.GArray)(result.(unsafe.Pointer)))
+	if dirs == nil {
+		println("Failed to convert to slice")
+	}
+
+	for _, dir := range dirs {
+		value, ok := dir.(*C.GValue)
+		if !ok {
+			continue
+		}
+
+		govalue, _ := ToGo(value)
+		_, ok = govalue.(string)
+		if !ok {
+			fmt.Println("Not a string")
+		}
+	}
+	/*
 	dirs, ok := result.([]interface{})
 	if !ok {
 		println("Type assertion to []interface{} failed.")
@@ -441,4 +414,5 @@ func ArrayTest() {
 	}
 
 	fmt.Printf("%v\n", dirs)
+	*/
 }
