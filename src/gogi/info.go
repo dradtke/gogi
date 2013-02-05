@@ -280,3 +280,78 @@ func (info *GiInfo) GetInvoker() (*GiInfo, error) {
 	}
 	return NewGiInfo((*C.GIBaseInfo)(C.g_vfunc_info_get_invoker((*C.GIVFuncInfo)(info.ptr)))), nil
 }
+
+/* -- Arg Info -- */
+
+type Direction C.GIDirection
+const (
+	In = C.GI_DIRECTION_IN
+	Out = C.GI_DIRECTION_OUT
+	InOut = C.GI_DIRECTION_INOUT
+)
+
+type ScopeType C.GIScopeType
+const (
+	Invalid = C.GI_SCOPE_TYPE_INVALID
+	Call = C.GI_SCOPE_TYPE_CALL
+	Async = C.GI_SCOPE_TYPE_ASYNC
+	Notified = C.GI_SCOPE_TYPE_NOTIFIED
+)
+
+func (info *GiInfo) GetDirection() (Direction, error) {
+	if info.Type != Arg {
+		return 0, fmt.Errorf("gogi: expected arg info, received %v", info.Type)
+	}
+	return (Direction)(C.g_arg_info_get_direction((*C.GIArgInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) IsCallerAllocates() (bool, error) {
+	if info.Type != Arg {
+		return false, fmt.Errorf("gogi: expected arg info, received %v", info.Type)
+	}
+	return GoBool(C.g_arg_info_is_caller_allocates((*C.GIArgInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) IsReturnValue() (bool, error) {
+	if info.Type != Arg {
+		return false, fmt.Errorf("gogi: expected arg info, received %v", info.Type)
+	}
+	return GoBool(C.g_arg_info_is_return_value((*C.GIArgInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) IsOptional() (bool, error) {
+	if info.Type != Arg {
+		return false, fmt.Errorf("gogi: expected arg info, received %v", info.Type)
+	}
+	return GoBool(C.g_arg_info_is_optional((*C.GIArgInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) MayBeNull() (bool, error) {
+	if info.Type != Arg {
+		return false, fmt.Errorf("gogi: expected arg info, received %v", info.Type)
+	}
+	return GoBool(C.g_arg_info_may_be_null((*C.GIArgInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetOwnershipTransfer() (Transfer, error) {
+	if info.Type != Arg {
+		return 0, fmt.Errorf("gogi: expected arg info, received %v", info.Type)
+	}
+	return (Transfer)(C.g_arg_info_get_ownership_transfer((*C.GIArgInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetScope() (ScopeType, error) {
+	if info.Type != Arg {
+		return 0, fmt.Errorf("gogi: expected arg info, received %v", info.Type)
+	}
+	return (ScopeType)(C.g_arg_info_get_scope((*C.GIArgInfo)(info.ptr))), nil
+}
+
+// TODO: get closure/destroy?
+
+func (info *GiInfo) GetType() (*GiInfo, error) {
+	if info.Type != Arg {
+		return nil, fmt.Errorf("gogi: expected arg info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_arg_info_get_type((*C.GIArgInfo)(info.ptr)))), nil
+}
