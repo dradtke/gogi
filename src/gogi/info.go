@@ -2,6 +2,7 @@ package gogi
 
 /*
 #include <glib.h>
+#include <glib-object.h>
 #include <girepository.h>
 */
 import "C"
@@ -179,3 +180,54 @@ func (info *GiInfo) GetFunctionVFunc() (*GiInfo, error) {
 }
 
 // invoke?
+
+/* -- Signal Info -- */
+
+type SignalFlags struct {
+	RunFirst bool
+	RunLast bool
+	RunCleanup bool
+	NoRecurse bool
+	Detailed bool
+	Action bool
+	NoHooks bool
+	MustCollect bool
+	Deprecated bool
+}
+
+func NewSignalFlags(bits C.GSignalFlags) *SignalFlags {
+	var flags SignalFlags
+	PopulateFlags(&flags, (C.gint)(bits), []C.gint{
+		C.G_SIGNAL_RUN_FIRST,
+		C.G_SIGNAL_RUN_LAST,
+		C.G_SIGNAL_RUN_CLEANUP,
+		C.G_SIGNAL_NO_RECURSE,
+		C.G_SIGNAL_DETAILED,
+		C.G_SIGNAL_ACTION,
+		C.G_SIGNAL_NO_HOOKS,
+		C.G_SIGNAL_MUST_COLLECT,
+		C.G_SIGNAL_DEPRECATED,
+	})
+	return &flags
+}
+
+func (info *GiInfo) GetSignalFlags() (*SignalFlags, error) {
+	if info.Type != Signal {
+		return nil, fmt.Errorf("gogi: expected signal info, received %v", info.Type)
+	}
+	return NewSignalFlags(C.g_signal_info_get_flags((*C.GISignalInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetClassClosure() (*GiInfo, error) {
+	if info.Type != Signal {
+		return nil, fmt.Errorf("gogi: expected signal info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_signal_info_get_class_closure((*C.GISignalInfo)(info.ptr)))), nil
+}
+
+func (info *GiInfo) TrueStopsEmit() (bool, error) {
+	if info.Type != Signal {
+		return false, fmt.Errorf("gogi: expected signal info, received %v", info.Type)
+	}
+	return GoBool(C.g_signal_info_true_stops_emit((*C.GISignalInfo)(info.ptr))), nil
+}
