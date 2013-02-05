@@ -231,3 +231,52 @@ func (info *GiInfo) TrueStopsEmit() (bool, error) {
 	}
 	return GoBool(C.g_signal_info_true_stops_emit((*C.GISignalInfo)(info.ptr))), nil
 }
+
+/* -- VFunc Info -- */
+
+type VFuncFlags struct {
+	MustChainUp bool
+	MustOverride bool
+	MustNotOverride bool
+	Throws bool
+}
+
+func NewVFuncFlags(bits C.GIVFuncInfoFlags) *VFuncFlags {
+	var flags VFuncFlags
+	PopulateFlags(&flags, (C.gint)(bits), []C.gint{
+		C.GI_VFUNC_MUST_CHAIN_UP,
+		C.GI_VFUNC_MUST_OVERRIDE,
+		C.GI_VFUNC_MUST_NOT_OVERRIDE,
+		C.GI_VFUNC_THROWS,
+	})
+	return &flags
+}
+
+func (info *GiInfo) GetVFuncFlags() (*VFuncFlags, error) {
+	if info.Type != VFunc {
+		return nil, fmt.Errorf("gogi: expected vfunc info, received %v", info.Type)
+	}
+	return NewVFuncFlags(C.g_vfunc_info_get_flags((*C.GIVFuncInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetOffset() (int, error) {
+	if info.Type != VFunc {
+		return 0, fmt.Errorf("gogi: expected vfunc info, received %v", info.Type)
+	}
+	// TODO: check for a value of 0xFFFF, which means it's unknown
+	return GoInt(C.g_vfunc_info_get_offset((*C.GIVFuncInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetSignal() (*GiInfo, error) {
+	if info.Type != VFunc {
+		return nil, fmt.Errorf("gogi: expected vfunc info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_vfunc_info_get_signal((*C.GIVFuncInfo)(info.ptr)))), nil
+}
+
+func (info *GiInfo) GetInvoker() (*GiInfo, error) {
+	if info.Type != VFunc {
+		return nil, fmt.Errorf("gogi: expected vfunc info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_vfunc_info_get_invoker((*C.GIVFuncInfo)(info.ptr)))), nil
+}
