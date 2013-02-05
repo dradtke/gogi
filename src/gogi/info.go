@@ -41,6 +41,10 @@ func NewGiInfo(ptr *C.GIBaseInfo) *GiInfo {
 	return &GiInfo{ptr, (GiType)(C.g_base_info_get_type(ptr))}
 }
 
+func (info *GiInfo) Free() {
+	C.g_base_info_unref(info.ptr)
+}
+
 /* -- Base Info -- */
 
 func (info *GiInfo) GetName() string {
@@ -56,7 +60,70 @@ func (info *GiInfo) IsDeprecated() bool {
 }
 
 func (info *GiInfo) GetAttribute(attr string) string {
-	return GoString(C.g_base_info_get_attribute(info.ptr, GlibString(attr)))
+	_attr := GlibString(attr) ; defer C.g_free((C.gpointer)(_attr))
+	return GoString(C.g_base_info_get_attribute(info.ptr, _attr))
+}
+
+/* -- Callables -- */
+
+type Transfer C.GITransfer
+const (
+	Nothing = C.GI_TRANSFER_NOTHING
+	Container = C.GI_TRANSFER_CONTAINER
+	Everything = C.GI_TRANSFER_EVERYTHING
+)
+
+func (info *GiInfo) IsCallable() bool {
+	switch info.Type {
+	case Function, Signal, VFunc:
+		return true
+	}
+	return false
+}
+
+func (info *GiInfo) GetReturnType() (*GiInfo, error) {
+	if !info.IsCallable() {
+		return nil, fmt.Errorf("gogi: expected callable info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_callable_info_get_return_type((*C.GICallableInfo)(info.ptr)))), nil
+}
+
+func (info *GiInfo) GetCallerOwns() (Transfer, error) {
+	if !info.IsCallable() {
+		return (Transfer)(C.G_MAXINT), fmt.Errorf("gogi: expected callable info, received %v", info.Type)
+	}
+	return (Transfer)(C.g_callable_info_get_caller_owns((*C.GICallableInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) MayReturnNull() (bool, error) {
+	if !info.IsCallable() {
+		return false, fmt.Errorf("gogi: expected callable info, received %v", info.Type)
+	}
+	return GoBool(C.g_callable_info_may_return_null((*C.GICallableInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetReturnAttribute(name string) (string, error) {
+	if !info.IsCallable() {
+		return "", fmt.Errorf("gogi: expected callable info, received %v", info.Type)
+	}
+	_name := GlibString(name) ; defer C.g_free((C.gpointer)(_name))
+	return GoString(C.g_callable_info_get_return_attribute((*C.GICallableInfo)(info.ptr), _name)), nil
+}
+
+// iterate return attributes?
+
+func (info *GiInfo) GetNArgs() (int, error) {
+	if !info.IsCallable() {
+		return 0, fmt.Errorf("gogi: expected callable info, received %v", info.Type)
+	}
+	return GoInt(C.g_callable_info_get_n_args((*C.GICallableInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetArg(n int) (*GiInfo, error) {
+	if !info.IsCallable() {
+		return nil, fmt.Errorf("gogi: expected callable info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_callable_info_get_arg((*C.GICallableInfo)(info.ptr), GlibInt(n)))), nil
 }
 
 /* -- Function Info -- */
@@ -96,3 +163,19 @@ func (info *GiInfo) GetFunctionFlags() (*FunctionFlags, error) {
 	}
 	return NewFunctionFlags(C.g_function_info_get_flags((*C.GIFunctionInfo)(info.ptr))), nil
 }
+
+func (info *GiInfo) GetFunctionProperty() (*GiInfo, error) {
+	if info.Type != Function {
+		return nil, fmt.Errorf("gogi: expected function info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_function_info_get_property((*C.GIFunctionInfo)(info.ptr)))), nil
+}
+
+func (info *GiInfo) GetFunctionVFunc() (*GiInfo, error) {
+	if info.Type != Function {
+		return nil, fmt.Errorf("gogi: expected function info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_function_info_get_vfunc((*C.GIFunctionInfo)(info.ptr)))), nil
+}
+
+// invoke?
