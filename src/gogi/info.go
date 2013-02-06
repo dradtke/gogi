@@ -46,6 +46,34 @@ func (info *GiInfo) Free() {
 	C.g_base_info_unref(info.ptr)
 }
 
+type TypeTag C.GITypeTag
+const (
+	Void = C.GI_TYPE_TAG_VOID
+	Boolean = C.GI_TYPE_TAG_BOOLEAN
+	Int8 = C.GI_TYPE_TAG_INT8
+	Uint8 = C.GI_TYPE_TAG_UINT8
+	Int16 = C.GI_TYPE_TAG_INT16
+	Uint16 = C.GI_TYPE_TAG_UINT16
+	Int32 = C.GI_TYPE_TAG_INT32
+	Uint32 = C.GI_TYPE_TAG_UINT32
+	Int64 = C.GI_TYPE_TAG_INT64
+	Uint64 = C.GI_TYPE_TAG_UINT64
+	Float = C.GI_TYPE_TAG_FLOAT
+	Double = C.GI_TYPE_TAG_DOUBLE
+	GType = C.GI_TYPE_TAG_GTYPE
+	Utf8 = C.GI_TYPE_TAG_UTF8
+	Filename = C.GI_TYPE_TAG_FILENAME
+	// non-basic types
+	GArray = C.GI_TYPE_TAG_ARRAY
+	GInterface = C.GI_TYPE_TAG_INTERFACE
+	GList = C.GI_TYPE_TAG_GLIST
+	GSList = C.GI_TYPE_TAG_GSLIST
+	GHash = C.GI_TYPE_TAG_GHASH
+	GError = C.GI_TYPE_TAG_ERROR
+	// another basic type
+	Unichar = C.GI_TYPE_TAG_UNICHAR
+)
+
 /* -- Base Info -- */
 
 func (info *GiInfo) GetName() string {
@@ -151,7 +179,7 @@ func NewFunctionFlags(bits C.GIFunctionInfoFlags) *FunctionFlags {
 	return &flags
 }
 
-func (info *GiInfo) GetFunctionSymbol() (string, error) {
+func (info *GiInfo) GetSymbol() (string, error) {
 	if info.Type != Function {
 		return "", fmt.Errorf("gogi: expected function info, received %v", info.Type)
 	}
@@ -267,7 +295,7 @@ func (info *GiInfo) GetOffset() (int, error) {
 	return GoInt(C.g_vfunc_info_get_offset((*C.GIVFuncInfo)(info.ptr))), nil
 }
 
-func (info *GiInfo) GetSignal() (*GiInfo, error) {
+func (info *GiInfo) GetVFuncSignal() (*GiInfo, error) {
 	if info.Type != VFunc {
 		return nil, fmt.Errorf("gogi: expected vfunc info, received %v", info.Type)
 	}
@@ -279,6 +307,204 @@ func (info *GiInfo) GetInvoker() (*GiInfo, error) {
 		return nil, fmt.Errorf("gogi: expected vfunc info, received %v", info.Type)
 	}
 	return NewGiInfo((*C.GIBaseInfo)(C.g_vfunc_info_get_invoker((*C.GIVFuncInfo)(info.ptr)))), nil
+}
+
+/* -- RegisteredType Info -- */
+
+func (info *GiInfo) IsRegisteredType() bool {
+	switch info.Type {
+	case Enum, Interface, Object, Struct, Union:
+		return true
+	}
+	return false
+}
+
+func (info *GiInfo) GetRegisteredTypeName() (string, error) {
+	if !info.IsRegisteredType() {
+		return "", fmt.Errorf("gogi: expected registered type info, received %v", info.Type)
+	}
+	return GoString(C.g_registered_type_info_get_type_name((*C.GIRegisteredTypeInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetRegisteredTypeInit() (string, error) {
+	if !info.IsRegisteredType() {
+		return "", fmt.Errorf("gogi: expected registered type info, received %v", info.Type)
+	}
+	return GoString(C.g_registered_type_info_get_type_init((*C.GIRegisteredTypeInfo)(info.ptr))), nil
+}
+
+// TODO: get gtype?
+
+/* -- Enum Info -- */
+
+func (info *GiInfo) GetNValues() (int, error) {
+	if info.Type != Enum {
+		return 0, fmt.Errorf("gogi: expected enum info, received %v", info.Type)
+	}
+	return GoInt(C.g_enum_info_get_n_values((*C.GIEnumInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetValue(n int) (*GiInfo, error) {
+	if info.Type != Enum {
+		return nil, fmt.Errorf("gogi: expected enum info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_enum_info_get_value((*C.GIEnumInfo)(info.ptr), GlibInt(n)))), nil
+}
+
+func (info *GiInfo) GetNEnumMethods() (int, error) {
+	if info.Type != Enum {
+		return 0, fmt.Errorf("gogi: expected enum info, received %v", info.Type)
+	}
+	return GoInt(C.g_enum_info_get_n_methods((*C.GIEnumInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetEnumMethod(n int) (*GiInfo, error) {
+	if info.Type != Enum {
+		return nil, fmt.Errorf("gogi: expected enum info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_enum_info_get_method((*C.GIEnumInfo)(info.ptr), GlibInt(n)))), nil
+}
+
+func (info *GiInfo) GetStorageType() (TypeTag, error) {
+	if info.Type != Enum {
+		return 0, fmt.Errorf("gogi: expected enum info, received %v", info.Type)
+	}
+	return (TypeTag)(C.g_enum_info_get_storage_type((*C.GIEnumInfo)(info.ptr))), nil
+}
+
+/* -- Object Info -- */
+
+func (info *GiInfo) GetObjectTypeName() (string, error) {
+	if info.Type != Object {
+		return "", fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return GoString(C.g_object_info_get_type_name((*C.GIObjectInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetObjectTypeInit() (string, error) {
+	if info.Type != Object {
+		return "", fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return GoString(C.g_object_info_get_type_init((*C.GIObjectInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) IsAbstract() (bool, error) {
+	if info.Type != Object {
+		return false, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return GoBool(C.g_object_info_get_abstract((*C.GIObjectInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) IsFundamental() (bool, error) {
+	if info.Type != Object {
+		return false, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return GoBool(C.g_object_info_get_fundamental((*C.GIObjectInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetParent() (*GiInfo, error) {
+	if info.Type != Object {
+		return nil, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_object_info_get_parent((*C.GIObjectInfo)(info.ptr)))), nil
+}
+
+func (info *GiInfo) GetNInterfaces() (int, error) {
+	if info.Type != Object {
+		return 0, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return GoInt(C.g_object_info_get_n_interfaces((*C.GIObjectInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetInterface(n int) (*GiInfo, error) {
+	if info.Type != Object {
+		return nil, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_object_info_get_interface((*C.GIObjectInfo)(info.ptr), GlibInt(n)))), nil
+}
+
+func (info *GiInfo) GetNFields() (int, error) {
+	if info.Type != Object {
+		return 0, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return GoInt(C.g_object_info_get_n_fields((*C.GIObjectInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetField(n int) (*GiInfo, error) {
+	if info.Type != Object {
+		return nil, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_object_info_get_field((*C.GIObjectInfo)(info.ptr), GlibInt(n)))), nil
+}
+
+func (info *GiInfo) GetNObjectProperties() (int, error) {
+	if info.Type != Object {
+		return 0, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return GoInt(C.g_object_info_get_n_properties((*C.GIObjectInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetObjectProperty(n int) (*GiInfo, error) {
+	if info.Type != Object {
+		return nil, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_object_info_get_property((*C.GIObjectInfo)(info.ptr), GlibInt(n)))), nil
+}
+
+func (info *GiInfo) GetNObjectMethods() (int, error) {
+	if info.Type != Object {
+		return 0, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return GoInt(C.g_object_info_get_n_methods((*C.GIObjectInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetObjectMethod(n int) (*GiInfo, error) {
+	if info.Type != Object {
+		return nil, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_object_info_get_method((*C.GIObjectInfo)(info.ptr), GlibInt(n)))), nil
+}
+
+func (info *GiInfo) GetNSignals() (int, error) {
+	if info.Type != Object {
+		return 0, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return GoInt(C.g_object_info_get_n_signals((*C.GIObjectInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetObjectSignal(n int) (*GiInfo, error) {
+	if info.Type != Object {
+		return nil, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_object_info_get_signal((*C.GIObjectInfo)(info.ptr), GlibInt(n)))), nil
+}
+
+func (info *GiInfo) GetNVFuncs() (int, error) {
+	if info.Type != Object {
+		return 0, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return GoInt(C.g_object_info_get_n_vfuncs((*C.GIObjectInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetVFunc(n int) (*GiInfo, error) {
+	if info.Type != Object {
+		return nil, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_object_info_get_vfunc((*C.GIObjectInfo)(info.ptr), GlibInt(n)))), nil
+}
+
+func (info *GiInfo) GetNConstants() (int, error) {
+	if info.Type != Object {
+		return 0, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return GoInt(C.g_object_info_get_n_constants((*C.GIObjectInfo)(info.ptr))), nil
+}
+
+func (info *GiInfo) GetConstant(n int) (*GiInfo, error) {
+	if info.Type != Object {
+		return nil, fmt.Errorf("gogi: expected object info, received %v", info.Type)
+	}
+	return NewGiInfo((*C.GIBaseInfo)(C.g_object_info_get_constant((*C.GIObjectInfo)(info.ptr), GlibInt(n)))), nil
 }
 
 /* -- Arg Info -- */
