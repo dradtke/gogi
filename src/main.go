@@ -18,15 +18,28 @@ func main() {
 		fmt.Printf("%s\n", err.Error())
 		return
 	}
-	fmt.Println("[Objects]")
 	for _, info := range infos {
-		if info.Type == gogi.Object {
-			fmt.Printf("%v\n", info.GetName())
-			n_methods, _ := info.GetNObjectMethods()
-			for i := 0; i<n_methods; i++ {
-				method_info, _ := info.GetObjectMethod(i)
-				method_symbol, _ := method_info.GetSymbol()
-				fmt.Printf("\t%s\n", method_symbol)
+		if info.GetName() == "init" {
+			DispFunction(info)
+		}
+	}
+}
+
+func DispFunction(info *gogi.GiInfo) {
+	fmt.Printf("%s\n", info.GetName())
+	for i := 0; i < info.GetNArgs(); i++ {
+		arg := info.GetArg(i)
+		argType := arg.GetType()
+		if argType.GetTag() == gogi.ArrayTag {
+			switch argType.GetArrayType() {
+				case gogi.CArray:
+					println("It's a C array.")
+				case gogi.GArray:
+					println("It's a GArray.")
+				case gogi.PtrArray:
+					println("It's a ptr array.")
+				case gogi.ByteArray:
+					println("It's a byte array.")
 			}
 		}
 	}

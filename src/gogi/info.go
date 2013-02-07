@@ -33,13 +33,18 @@ const (
 	Unresolved = C.GI_INFO_TYPE_UNRESOLVED
 )
 
+func InfoTypeToString(typ GiType) string {
+	return GoString(C.g_info_type_to_string((C.GIInfoType)(typ)))
+}
+
 type GiInfo struct {
 	ptr *C.GIBaseInfo
 	Type GiType
 }
 
 func NewGiInfo(ptr *C.GIBaseInfo) *GiInfo {
-	return &GiInfo{ptr, (GiType)(C.g_base_info_get_type(ptr))}
+	typ := (GiType)(C.g_base_info_get_type(ptr))
+	return &GiInfo{ptr, typ}
 }
 
 func (info *GiInfo) Free() {
@@ -48,44 +53,36 @@ func (info *GiInfo) Free() {
 
 type TypeTag C.GITypeTag
 const (
-	Void = C.GI_TYPE_TAG_VOID
-	Boolean = C.GI_TYPE_TAG_BOOLEAN
-	Int8 = C.GI_TYPE_TAG_INT8
-	Uint8 = C.GI_TYPE_TAG_UINT8
-	Int16 = C.GI_TYPE_TAG_INT16
-	Uint16 = C.GI_TYPE_TAG_UINT16
-	Int32 = C.GI_TYPE_TAG_INT32
-	Uint32 = C.GI_TYPE_TAG_UINT32
-	Int64 = C.GI_TYPE_TAG_INT64
-	Uint64 = C.GI_TYPE_TAG_UINT64
-	Float = C.GI_TYPE_TAG_FLOAT
-	Double = C.GI_TYPE_TAG_DOUBLE
-	GType = C.GI_TYPE_TAG_GTYPE
-	Utf8 = C.GI_TYPE_TAG_UTF8
-	Filename = C.GI_TYPE_TAG_FILENAME
+	VoidTag = C.GI_TYPE_TAG_VOID
+	BooleanTag = C.GI_TYPE_TAG_BOOLEAN
+	Int8Tag = C.GI_TYPE_TAG_INT8
+	Uint8Tag = C.GI_TYPE_TAG_UINT8
+	Int16Tag = C.GI_TYPE_TAG_INT16
+	Uint16Tag = C.GI_TYPE_TAG_UINT16
+	Int32Tag = C.GI_TYPE_TAG_INT32
+	Uint32Tag = C.GI_TYPE_TAG_UINT32
+	Int64Tag = C.GI_TYPE_TAG_INT64
+	Uint64Tag = C.GI_TYPE_TAG_UINT64
+	FloatTag = C.GI_TYPE_TAG_FLOAT
+	DoubleTag = C.GI_TYPE_TAG_DOUBLE
+	GTypeTag = C.GI_TYPE_TAG_GTYPE
+	Utf8Tag = C.GI_TYPE_TAG_UTF8
+	FilenameTag = C.GI_TYPE_TAG_FILENAME
 	// non-basic types
-	GArray = C.GI_TYPE_TAG_ARRAY
-	GInterface = C.GI_TYPE_TAG_INTERFACE
-	GList = C.GI_TYPE_TAG_GLIST
-	GSList = C.GI_TYPE_TAG_GSLIST
-	GHash = C.GI_TYPE_TAG_GHASH
-	GError = C.GI_TYPE_TAG_ERROR
+	ArrayTag = C.GI_TYPE_TAG_ARRAY
+	InterfaceTag = C.GI_TYPE_TAG_INTERFACE
+	GListTag = C.GI_TYPE_TAG_GLIST
+	GSListTag = C.GI_TYPE_TAG_GSLIST
+	GHashTag = C.GI_TYPE_TAG_GHASH
+	ErrorTag = C.GI_TYPE_TAG_ERROR
 	// another basic type
-	Unichar = C.GI_TYPE_TAG_UNICHAR
+	UnicharTag = C.GI_TYPE_TAG_UNICHAR
 )
 
 /* -- Base Info -- */
 
 func (info *GiInfo) GetName() string {
 	return GoString(C.g_base_info_get_name(info.ptr))
-}
-
-func (info *GiInfo) GetNamespace() string {
-	return GoString(C.g_base_info_get_namespace(info.ptr))
-}
-
-func (info *GiInfo) IsDeprecated() bool {
-	return GoBool(C.g_base_info_is_deprecated(info.ptr))
 }
 
 func (info *GiInfo) GetAttribute(attr string) string {
@@ -434,7 +431,7 @@ func (info *GiInfo) GetType() *GiInfo {
 type ArrayType C.GIArrayType
 const (
 	CArray = C.GI_ARRAY_TYPE_C
-	GlibArray = C.GI_ARRAY_TYPE_ARRAY
+	GArray = C.GI_ARRAY_TYPE_ARRAY
 	PtrArray = C.GI_ARRAY_TYPE_PTR_ARRAY
 	ByteArray = C.GI_ARRAY_TYPE_BYTE_ARRAY
 )
