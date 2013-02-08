@@ -7,6 +7,7 @@ package gogi
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <girepository.h>
 
 GList *empty_glist = NULL;
 GSList *empty_gslist = NULL;
@@ -109,6 +110,8 @@ func ToGo(ptr *C.GValue) (interface{}, reflect.Kind) {
 }
 
 // Convert an arbitrary Go value into its C representation
+// TODO: create a method that takes a variable name and type tag
+// and turns it into the appropriate code to marshal it
 func ToGlib(data interface{}) C.gpointer {
 	value := reflect.ValueOf(data)
 	// TODO: fill this in
@@ -376,6 +379,29 @@ func PopulateFlags(data interface{}, bits C.gint, flags []C.gint) {
 	for i := range flags {
 		value.Field(i).SetBool(GoBool(C.and(bits, flags[i])))
 	}
+}
+
+func GoType(typeInfo *GiInfo) string {
+	var result string
+	if typeInfo.IsPointer() {
+		result += "*"
+	}
+	tag := typeInfo.GetTag()
+	if tag == ArrayTag {
+		result += "[]"
+		contentType := typeInfo.GetParamType(0)
+		result += GoType(contentType)
+	} else {
+		switch tag {
+		case C.GI_TYPE_TAG_INT32:
+			return "int32"
+		case C.GI_TYPE_TAG_UTF8:
+			return "string"
+		default:
+			println("Unrecognized tag:", TypeTagToString(tag))
+		}
+	}
+	return result
 }
 
 /* --- Test Methods --- */

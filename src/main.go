@@ -26,21 +26,15 @@ func main() {
 }
 
 func DispFunction(info *gogi.GiInfo) {
-	fmt.Printf("%s\n", info.GetName())
-	for i := 0; i < info.GetNArgs(); i++ {
+	fmt.Printf("func %s(", info.GetName())
+	arg_count := info.GetNArgs()
+	for i := 0; i < arg_count; i++ {
 		arg := info.GetArg(i)
-		argType := arg.GetType()
-		if argType.GetTag() == gogi.ArrayTag {
-			switch argType.GetArrayType() {
-				case gogi.CArray:
-					println("It's a C array.")
-				case gogi.GArray:
-					println("It's a GArray.")
-				case gogi.PtrArray:
-					println("It's a ptr array.")
-				case gogi.ByteArray:
-					println("It's a byte array.")
-			}
+		fmt.Printf("%s %s", arg.GetName(), gogi.GoType(arg.GetType()))
+		if i != arg_count-1 {
+			fmt.Print(", ")
 		}
 	}
+	fmt.Print(")")
+	// return type
 }
