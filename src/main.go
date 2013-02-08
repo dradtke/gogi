@@ -20,21 +20,7 @@ func main() {
 	}
 	for _, info := range infos {
 		if info.GetName() == "init" {
-			DispFunction(info)
+			println(gogi.WriteFunction(info))
 		}
 	}
-}
-
-func DispFunction(info *gogi.GiInfo) {
-	fmt.Printf("func %s(", info.GetName())
-	arg_count := info.GetNArgs()
-	for i := 0; i < arg_count; i++ {
-		arg := info.GetArg(i)
-		fmt.Printf("%s %s", arg.GetName(), gogi.GoType(arg.GetType()))
-		if i != arg_count-1 {
-			fmt.Print(", ")
-		}
-	}
-	fmt.Print(")")
-	// return type
 }

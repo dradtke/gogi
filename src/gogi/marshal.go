@@ -389,8 +389,7 @@ func GoType(typeInfo *GiInfo) string {
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
 		result += "[]"
-		contentType := typeInfo.GetParamType(0)
-		result += GoType(contentType)
+		result += GoType(typeInfo.GetParamType(0))
 	} else {
 		switch tag {
 		case C.GI_TYPE_TAG_INT32:
@@ -402,6 +401,30 @@ func GoType(typeInfo *GiInfo) string {
 		}
 	}
 	return result
+}
+
+// returns the C type and the necessary marshaling code
+func GoToC(typeInfo *GiInfo, govar string, cvar string) (ctype string, marshal string) {
+	tag := typeInfo.GetTag()
+	if tag == ArrayTag {
+		// do array stuff
+		switch typeInfo.GetArrayType() {
+		case C.GI_ARRAY_TYPE_C:
+			ar_ctype, ar_marshal := GoToC(typeInfo.GetParamType(0), govar + "_ar", cvar + "_ar")
+			ctype = "*" + ar_ctype
+			marshal = "// TODO: marshal array\n\t" + ar_marshal
+		}
+	} else {
+		switch tag {
+		case C.GI_TYPE_TAG_INT32:
+			ctype = "C.gint32"
+			marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, govar)
+		case C.GI_TYPE_TAG_UTF8:
+			ctype = "*C.gchar"
+			marshal = "// TODO: marshal strings"
+		}
+	}
+	return
 }
 
 /* --- Test Methods --- */
