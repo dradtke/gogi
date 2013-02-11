@@ -12,15 +12,26 @@ type Argument struct {
 	typ *GiInfo
 }
 
+func CamelCase(str string) (name string) {
+	words := strings.Split(str, "_")
+	for _, word := range words {
+		name += strings.Title(word)
+	}
+	return
+}
+
 // return a marshaled Go function and any necessary C wrapper
 func WriteFunction(info *GiInfo) (string, string) {
 	var text string = "func "
-	var wrapper string = "void "
+	var wrapper string
 	c_func := info.GetFullName()
 
 	// TODO: check if this is a method on an object
+	ret := info.GetReturnType() ; defer ret.Free()
+	ret_ctype := CType(ret, In)
+	wrapper += ret_ctype + " "
 
-	text += strings.Title(info.GetName()) + "("
+	text += CamelCase(info.GetName()) + "("
 	wrapper += "gogi_" + c_func + "("
 
 	argc := info.GetNArgs()
@@ -39,6 +50,10 @@ func WriteFunction(info *GiInfo) (string, string) {
 	wrapper += ") "
 
 	// TODO: check for a return value
+	ret_gotype, ret_marshal := CToGo(ret, "retval", "c_retval")
+	if ret_gotype != "" {
+		text += ret_gotype + " "
+	}
 
 	text += "{\n" // Go function open
 	wrapper += "{\n"
@@ -61,8 +76,17 @@ func WriteFunction(info *GiInfo) (string, string) {
 		go_argnames[i] += arg.cname
 		c_argnames[i] += arg.name
 	}
-	text += "\tC.gogi_" + c_func + "(" + strings.Join(go_argnames, ", ") + ")\n"
-	wrapper += "\t" + c_func + "(" + strings.Join(c_argnames, ", ") + ");\n"
+	text += "\tc_retval, _ := C.gogi_" + c_func + "(" + strings.Join(go_argnames, ", ") + ")\n"
+	if ret_gotype != "" {
+		text += "\t" + ret_marshal + "\n\treturn retval\n"
+	}
+
+	// TODO: catch errno
+	wrapper += "\t"
+	if ret_ctype != "void" {
+		wrapper += "return "
+	}
+	wrapper += c_func + "(" + strings.Join(c_argnames, ", ") + ");\n"
 
 	text += "}"
 	wrapper += "}"

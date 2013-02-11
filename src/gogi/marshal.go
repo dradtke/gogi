@@ -117,6 +117,25 @@ func GoToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, marshal s
 	return
 }
 
+func CToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, marshal string) {
+	tag := typeInfo.GetTag()
+	if tag == ArrayTag {
+		// TODO: implement
+	} else {
+		switch tag {
+		case C.GI_TYPE_TAG_BOOLEAN:
+			gotype = "bool"
+			marshal = fmt.Sprintf("var %s %s\n", govar, gotype)
+			marshal += fmt.Sprintf("\tif %s == 0 {", cvar) + "\n\t" +
+					   fmt.Sprintf("\t%s = false", govar) + "\n\t" +
+					   "} else {\n\t" +
+					   fmt.Sprintf("\t%s = true", govar) + "\n\t" +
+			           "}"
+		}
+	}
+	return
+}
+
 func GoType(typeInfo *GiInfo, dir Direction) string {
 	var result string
 
@@ -135,6 +154,11 @@ func GoType(typeInfo *GiInfo, dir Direction) string {
 		result += out + "[]" + GoType(typeInfo.GetParamType(0), In)
 	} else {
 		switch tag {
+			// void?
+		case C.GI_TYPE_TAG_VOID:
+			return ""
+		case C.GI_TYPE_TAG_BOOLEAN:
+			return ptr + out + "bool"
 		case C.GI_TYPE_TAG_INT32:
 			result = ptr + out + "int32"
 		case C.GI_TYPE_TAG_UTF8:
@@ -162,6 +186,10 @@ func CType(typeInfo *GiInfo, dir Direction) string {
 		result = CType(typeInfo.GetParamType(0), In) + ptr
 	} else {
 		switch tag {
+		case C.GI_TYPE_TAG_VOID:
+			result = "void"
+		case C.GI_TYPE_TAG_BOOLEAN:
+			result = "gboolean" + ptr
 		case C.GI_TYPE_TAG_INT32:
 			result = "gint32" + ptr
 		case C.GI_TYPE_TAG_UTF8:
