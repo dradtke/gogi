@@ -8,6 +8,7 @@ package gogi
 import "C"
 import (
 	//"fmt"
+	"strings"
 )
 
 type GiType C.GIInfoType
@@ -83,6 +84,10 @@ const (
 
 func (info *GiInfo) GetName() string {
 	return GoString(C.g_base_info_get_name(info.ptr))
+}
+
+func (info *GiInfo) GetFullName() string {
+	return strings.ToLower(GoString(C.g_base_info_get_namespace(info.ptr))) + "_" + info.GetName()
 }
 
 func (info *GiInfo) GetAttribute(attr string) string {

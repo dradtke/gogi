@@ -76,6 +76,104 @@ import (
 	"unsafe"
 )
 
+// returns the C type and the necessary marshaling code
+// ???: is anything below this really necessary?
+func GoToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, marshal string) {
+	govar := arg.name
+
+	var ref string
+	dir := arg.info.GetDirection()
+	if dir == Out || dir == InOut {
+		ref = "*"
+	}
+
+	tag := typeInfo.GetTag()
+	if tag == ArrayTag {
+		// do array stuff
+		switch typeInfo.GetArrayType() {
+		case C.GI_ARRAY_TYPE_C:
+			arg.name = govar + "_ar"
+			ar_ctype, _ := GoToC(typeInfo.GetParamType(0), arg, cvar + "_ar")
+			ctype = "*" + ar_ctype
+			cvar_len := cvar + "_len"
+			cvar_val := cvar + "_val"
+			marshal = cvar_len + " := len(" + ref + govar + ")\n\t" +
+			          cvar_val + " := make([]" + ar_ctype + ", " + cvar_len + ")\n\t" +
+			          "for i := 0; i < " + cvar_len + "; i++ {\n\t" +
+					  "\t" + cvar_val + "[i] = (*C.gchar)(C.CString((" + ref + govar + ")[i]))\n\t" +
+					  "}\n\t" +
+					  cvar + " = (" + ref + ar_ctype + ")(unsafe.Pointer(&" + cvar_val + "))"
+		}
+	} else {
+		switch tag {
+		case C.GI_TYPE_TAG_INT32:
+			ctype = "C.gint32"
+			marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
+		case C.GI_TYPE_TAG_UTF8:
+			ctype = "*C.gchar"
+			marshal = "// TODO: marshal strings"
+		}
+	}
+	return
+}
+
+func GoType(typeInfo *GiInfo, dir Direction) string {
+	var result string
+
+	// TODO: refactor this and the equivalent code in CType to its own method
+	var ptr string
+	if typeInfo.IsPointer() {
+		ptr = "*"
+	}
+	var out string
+	if dir == Out || dir == InOut {
+		out = "*"
+	}
+
+	tag := typeInfo.GetTag()
+	if tag == ArrayTag {
+		result += out + "[]" + GoType(typeInfo.GetParamType(0), In)
+	} else {
+		switch tag {
+		case C.GI_TYPE_TAG_INT32:
+			result = ptr + out + "int32"
+		case C.GI_TYPE_TAG_UTF8:
+			result = out + "string"
+		default:
+			println("Unrecognized tag:", TypeTagToString(tag))
+		}
+	}
+	return result
+}
+
+func CType(typeInfo *GiInfo, dir Direction) string {
+	var result string
+
+	var ptr string
+	if dir == Out || dir == InOut {
+		ptr += "*"
+	}
+	if typeInfo.IsPointer() {
+		ptr += "*"
+	}
+
+	tag := typeInfo.GetTag()
+	if tag == ArrayTag {
+		result = CType(typeInfo.GetParamType(0), In) + ptr
+	} else {
+		switch tag {
+		case C.GI_TYPE_TAG_INT32:
+			result = "gint32" + ptr
+		case C.GI_TYPE_TAG_UTF8:
+			result = "gchar" + ptr
+		default:
+			println("Unrecognized tag:", TypeTagToString(tag))
+			result = ""
+		}
+	}
+	return result
+}
+
 /* -- Pointers -- */
 
 func ToGo(ptr *C.GValue) (interface{}, reflect.Kind) {
@@ -379,52 +477,6 @@ func PopulateFlags(data interface{}, bits C.gint, flags []C.gint) {
 	for i := range flags {
 		value.Field(i).SetBool(GoBool(C.and(bits, flags[i])))
 	}
-}
-
-func GoType(typeInfo *GiInfo) string {
-	var result string
-	if typeInfo.IsPointer() {
-		result += "*"
-	}
-	tag := typeInfo.GetTag()
-	if tag == ArrayTag {
-		result += "[]"
-		result += GoType(typeInfo.GetParamType(0))
-	} else {
-		switch tag {
-		case C.GI_TYPE_TAG_INT32:
-			return "int32"
-		case C.GI_TYPE_TAG_UTF8:
-			return "string"
-		default:
-			println("Unrecognized tag:", TypeTagToString(tag))
-		}
-	}
-	return result
-}
-
-// returns the C type and the necessary marshaling code
-func GoToC(typeInfo *GiInfo, govar string, cvar string) (ctype string, marshal string) {
-	tag := typeInfo.GetTag()
-	if tag == ArrayTag {
-		// do array stuff
-		switch typeInfo.GetArrayType() {
-		case C.GI_ARRAY_TYPE_C:
-			ar_ctype, ar_marshal := GoToC(typeInfo.GetParamType(0), govar + "_ar", cvar + "_ar")
-			ctype = "*" + ar_ctype
-			marshal = "// TODO: marshal array\n\t" + ar_marshal
-		}
-	} else {
-		switch tag {
-		case C.GI_TYPE_TAG_INT32:
-			ctype = "C.gint32"
-			marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, govar)
-		case C.GI_TYPE_TAG_UTF8:
-			ctype = "*C.gchar"
-			marshal = "// TODO: marshal strings"
-		}
-	}
-	return
 }
 
 /* --- Test Methods --- */

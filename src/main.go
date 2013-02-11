@@ -7,8 +7,8 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("usage: main.go <namespace>")
+	if len(os.Args) < 3 {
+		fmt.Println("usage: main.go <namespace> <function>")
 		return
 	}
 	gogi.Init()
@@ -19,8 +19,10 @@ func main() {
 		return
 	}
 	for _, info := range infos {
-		if info.GetName() == "init" {
-			println(gogi.WriteFunction(info))
+		if info.GetName() == os.Args[2] {
+			gofunc, cfunc := gogi.WriteFunction(info)
+			println("/*\n" + cfunc + "\n*/\n")
+			println(gofunc)
 		}
 	}
 }
