@@ -50,8 +50,9 @@ func WriteFunction(info *GiInfo) (string, string) {
 	wrapper += ") "
 
 	// TODO: check for a return value
+	returns_value := (ret.GetTag() != VoidTag)
 	ret_gotype, ret_marshal := CToGo(ret, "retval", "c_retval")
-	if ret_gotype != "" {
+	if returns_value {
 		text += ret_gotype + " "
 	}
 
@@ -76,14 +77,19 @@ func WriteFunction(info *GiInfo) (string, string) {
 		go_argnames[i] += arg.cname
 		c_argnames[i] += arg.name
 	}
-	text += "\tc_retval, _ := C.gogi_" + c_func + "(" + strings.Join(go_argnames, ", ") + ")\n"
-	if ret_gotype != "" {
+
+	text += "\t"
+	if returns_value {
+		text += "c_retval, _ := "
+	}
+	text += "C.gogi_" + c_func + "(" + strings.Join(go_argnames, ", ") + ")\n"
+	if returns_value {
 		text += "\t" + ret_marshal + "\n\treturn retval\n"
 	}
 
 	// TODO: catch errno
 	wrapper += "\t"
-	if ret_ctype != "void" {
+	if returns_value {
 		wrapper += "return "
 	}
 	wrapper += c_func + "(" + strings.Join(c_argnames, ", ") + ");\n"
