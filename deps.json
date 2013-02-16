@@ -1,0 +1,6 @@
+{
+	"Gtk" : {
+		"Pkgs"    : ["gtk+-3.0"],
+		"Headers" : ["gtk/gtk.h"]
+	}
+}

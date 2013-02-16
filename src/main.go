@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"gogi"
 	"path/filepath"
@@ -13,8 +14,6 @@ type Deps struct {
 	Pkgs []string
 	Headers []string
 }
-
-var KnownPackages map[string]Deps
 
 func CreatePackageRoot(pkg string) string {
 	root := filepath.Join(os.TempDir(), "gogi-" + pkg)
@@ -36,12 +35,19 @@ func main() {
 	}
 
 	// TODO: save this in a config file
+	knownPackages := make(map[string]Deps)
+	deps_config, _ := os.Open("deps.json")
+	deps_decoder := json.NewDecoder(deps_config)
+	deps_decoder.Decode(&knownPackages)
+	deps_config.Close()
+	/*
 	KnownPackages = map[string]Deps {
 		"Gtk" : Deps{
 			[]string{"gtk+-3.0"},
 			[]string{"gtk/gtk.h"},
 		},
 	}
+	*/
 
 	namespace := os.Args[1]
 	gogi.Init()
@@ -64,7 +70,7 @@ func main() {
 	}
 
 	pkg := strings.ToLower(namespace)
-	deps, deps_exist := KnownPackages[namespace]
+	deps, deps_exist := knownPackages[namespace]
 	pkg_root := CreatePackageRoot(pkg)
 
 	f := OpenSourceFile(pkg_root, pkg)
