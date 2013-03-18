@@ -99,3 +99,8 @@ func WriteFunction(info *GiInfo) (string, string) {
 
 	return text, wrapper
 }
+
+func WriteObject(info *GiInfo) string {
+	name := info.GetName()
+	return fmt.Sprintf("type %s struct { }\n", name)
+}

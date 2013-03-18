@@ -159,10 +159,32 @@ func GoType(typeInfo *GiInfo, dir Direction) string {
 			return ""
 		case C.GI_TYPE_TAG_BOOLEAN:
 			return ptr + out + "bool"
+		case C.GI_TYPE_TAG_INT8:
+			result = ptr + out + "int8"
+		case C.GI_TYPE_TAG_INT16:
+			result = ptr + out + "int16"
 		case C.GI_TYPE_TAG_INT32:
 			result = ptr + out + "int32"
+		case C.GI_TYPE_TAG_INT64:
+			result = ptr + out + "int64"
+		case C.GI_TYPE_TAG_UINT8:
+			result = ptr + out + "uint8"
+		case C.GI_TYPE_TAG_UINT16:
+			result = ptr + out + "uint16"
+		case C.GI_TYPE_TAG_UINT32:
+			result = ptr + out + "uint32"
+		case C.GI_TYPE_TAG_UINT64:
+			result = ptr + out + "uint64"
+		case C.GI_TYPE_TAG_FLOAT:
+			result = ptr + out + "float32"
+		case C.GI_TYPE_TAG_DOUBLE:
+			result = ptr + out + "float64"
 		case C.GI_TYPE_TAG_UTF8:
-			result = out + "string"
+			result = ptr + out + "string"
+		case C.GI_TYPE_TAG_FILENAME:
+			result = ptr + out + "string"
+		case C.GI_TYPE_TAG_UNICHAR:
+			result = ptr + out + "rune"
 		default:
 			println("Unrecognized tag:", TypeTagToString(tag))
 		}

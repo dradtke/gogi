@@ -29,25 +29,16 @@ func OpenSourceFile(root string, pkg string) *os.File {
 }
 
 func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("usage: main.go <namespace> <function>")
+	if len(os.Args) < 2 {
+		fmt.Println("usage: main.go <namespace>")
 		return
 	}
 
-	// TODO: save this in a config file
 	knownPackages := make(map[string]Deps)
 	deps_config, _ := os.Open("deps.json")
 	deps_decoder := json.NewDecoder(deps_config)
 	deps_decoder.Decode(&knownPackages)
 	deps_config.Close()
-	/*
-	KnownPackages = map[string]Deps {
-		"Gtk" : Deps{
-			[]string{"gtk+-3.0"},
-			[]string{"gtk/gtk.h"},
-		},
-	}
-	*/
 
 	namespace := os.Args[1]
 	gogi.Init()
@@ -62,10 +53,13 @@ func main() {
 	var c_code string
 	var go_code string
 	for _, info := range infos {
-		if info.GetName() == os.Args[2] {
+		if info.Type == gogi.Function {
 			gofunc, cfunc := gogi.WriteFunction(info)
 			c_code += cfunc + "\n"
 			go_code += gofunc + "\n"
+		} else if info.Type == gogi.Object {
+			decl := gogi.WriteObject(info)
+			go_code += decl + "\n"
 		}
 	}
 
