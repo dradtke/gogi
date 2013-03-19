@@ -53,13 +53,20 @@ func main() {
 	var c_code string
 	var go_code string
 	for _, info := range infos {
+		/*
 		if info.Type == gogi.Function {
-			gofunc, cfunc := gogi.WriteFunction(info)
-			c_code += cfunc + "\n"
-			go_code += gofunc + "\n"
+			go, c := gogi.WriteFunction(info, nil)
+			c_code += c + "\n"
+			go_code += go + "\n"
 		} else if info.Type == gogi.Object {
 			decl := gogi.WriteObject(info)
 			go_code += decl + "\n"
+		}
+		*/
+		if info.Type == gogi.Object && info.GetName() == "Window" {
+			g, c := gogi.WriteObject(info)
+			go_code += g + "\n"
+			c_code += c + "\n"
 		}
 	}
 

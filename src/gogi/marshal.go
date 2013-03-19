@@ -106,12 +106,40 @@ func GoToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, marshal s
 		}
 	} else {
 		switch tag {
-		case C.GI_TYPE_TAG_INT32:
-			ctype = "C.gint32"
-			marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
-		case C.GI_TYPE_TAG_UTF8:
-			ctype = "*C.gchar"
-			marshal = "// TODO: marshal strings"
+			case C.GI_TYPE_TAG_INT8:
+				ctype = "C.gint8"
+				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
+			case C.GI_TYPE_TAG_INT16:
+				ctype = "C.gint16"
+				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
+			case C.GI_TYPE_TAG_INT32:
+				ctype = "C.gint32"
+				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
+			case C.GI_TYPE_TAG_INT64:
+				ctype = "C.gint64"
+				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
+			case C.GI_TYPE_TAG_UINT8:
+				ctype = "C.guint8"
+				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
+			case C.GI_TYPE_TAG_UINT16:
+				ctype = "C.guint16"
+				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
+			case C.GI_TYPE_TAG_UINT32:
+				ctype = "C.guint32"
+				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
+			case C.GI_TYPE_TAG_UINT64:
+				ctype = "C.guint64"
+				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
+			case C.GI_TYPE_TAG_UTF8, C.GI_TYPE_TAG_FILENAME:
+				ctype = "*C.gchar"
+				marshal = "// TODO: marshal strings"
+			case C.GI_TYPE_TAG_INTERFACE:
+				interfaceInfo := typeInfo.GetTypeInterface()
+				switch interfaceInfo.Type {
+					case Enum:
+						ctype = "gint"
+						marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
+				}
 		}
 	}
 	return
@@ -123,14 +151,21 @@ func CToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, marshal 
 		// TODO: implement
 	} else {
 		switch tag {
-		case C.GI_TYPE_TAG_BOOLEAN:
-			gotype = "bool"
-			marshal = fmt.Sprintf("var %s %s\n", govar, gotype)
-			marshal += fmt.Sprintf("\tif %s == 0 {", cvar) + "\n\t" +
-					   fmt.Sprintf("\t%s = false", govar) + "\n\t" +
-					   "} else {\n\t" +
-					   fmt.Sprintf("\t%s = true", govar) + "\n\t" +
-			           "}"
+			case C.GI_TYPE_TAG_BOOLEAN:
+				gotype = "bool"
+				marshal = fmt.Sprintf("var %s %s\n", govar, gotype)
+				marshal += fmt.Sprintf("\tif %s == 0 {", cvar) + "\n\t" +
+						   fmt.Sprintf("\t%s = false", govar) + "\n\t" +
+						   "} else {\n\t" +
+						   fmt.Sprintf("\t%s = true", govar) + "\n\t" +
+				           "}"
+			case C.GI_TYPE_TAG_INTERFACE:
+				interfaceInfo := typeInfo.GetTypeInterface()
+				switch interfaceInfo.Type {
+					case Object:
+						gotype = "*" + interfaceInfo.GetName()
+						marshal = "// marshal?"
+				}
 		}
 	}
 	return
@@ -179,14 +214,20 @@ func GoType(typeInfo *GiInfo, dir Direction) string {
 			result = ptr + out + "float32"
 		case C.GI_TYPE_TAG_DOUBLE:
 			result = ptr + out + "float64"
-		case C.GI_TYPE_TAG_UTF8:
-			result = ptr + out + "string"
-		case C.GI_TYPE_TAG_FILENAME:
+		case C.GI_TYPE_TAG_UTF8, C.GI_TYPE_TAG_FILENAME:
 			result = ptr + out + "string"
 		case C.GI_TYPE_TAG_UNICHAR:
 			result = ptr + out + "rune"
+		case C.GI_TYPE_TAG_INTERFACE:
+			interfaceType := typeInfo.GetTypeInterface()
+			switch interfaceType.Type {
+				case Enum:
+					result = interfaceType.GetName()
+				case Object:
+					result = ptr + out + interfaceType.GetName()
+			}
 		default:
-			println("Unrecognized tag:", TypeTagToString(tag))
+			println("[GoType] unrecognized tag:", TypeTagToString(tag))
 		}
 	}
 	return result
@@ -212,13 +253,39 @@ func CType(typeInfo *GiInfo, dir Direction) string {
 			result = "void"
 		case C.GI_TYPE_TAG_BOOLEAN:
 			result = "gboolean" + ptr
+		case C.GI_TYPE_TAG_INT8:
+			result = "gint8" + ptr
+		case C.GI_TYPE_TAG_INT16:
+			result = "gint16" + ptr
 		case C.GI_TYPE_TAG_INT32:
 			result = "gint32" + ptr
-		case C.GI_TYPE_TAG_UTF8:
+		case C.GI_TYPE_TAG_INT64:
+			result = "gint64" + ptr
+		case C.GI_TYPE_TAG_UINT8:
+			result = "guint8" + ptr
+		case C.GI_TYPE_TAG_UINT16:
+			result = "guint16" + ptr
+		case C.GI_TYPE_TAG_UINT32:
+			result = "guint32" + ptr
+		case C.GI_TYPE_TAG_UINT64:
+			result = "guint64" + ptr
+		case C.GI_TYPE_TAG_FLOAT:
+			result = "gfloat" + ptr
+		case C.GI_TYPE_TAG_DOUBLE:
+			result = "gdouble" + ptr
+		case C.GI_TYPE_TAG_UTF8, C.GI_TYPE_TAG_FILENAME:
 			result = "gchar" + ptr
+		case C.GI_TYPE_TAG_UNICHAR:
+			result = "gunichar" + ptr
+		case C.GI_TYPE_TAG_INTERFACE:
+			interfaceType := typeInfo.GetTypeInterface()
+			if interfaceType.Type == Object {
+				result = interfaceType.GetObjectTypeName() + ptr
+			} else {
+				// what the hell do we do here?
+			}
 		default:
-			println("Unrecognized tag:", TypeTagToString(tag))
-			result = ""
+			println("[CType ] unrecognized tag:", TypeTagToString(tag))
 		}
 	}
 	return result

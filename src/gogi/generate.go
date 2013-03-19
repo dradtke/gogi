@@ -12,59 +12,63 @@ type Argument struct {
 	typ *GiInfo
 }
 
-func CamelCase(str string) (name string) {
-	words := strings.Split(str, "_")
-	for _, word := range words {
-		name += strings.Title(word)
-	}
-	return
-}
-
 // return a marshaled Go function and any necessary C wrapper
-func WriteFunction(info *GiInfo) (string, string) {
-	var text string = "func "
-	var wrapper string
-	c_func := info.GetFullName()
-
-	// TODO: check if this is a method on an object
-	ret := info.GetReturnType() ; defer ret.Free()
-	ret_ctype := CType(ret, In)
-	wrapper += ret_ctype + " "
-
-	text += CamelCase(info.GetName()) + "("
-	wrapper += "gogi_" + c_func + "("
-
+func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
+	flags := info.GetFunctionFlags()
+	symbol := info.GetSymbol()
 	argc := info.GetNArgs()
+
+	g += "func "
+	if owner != nil && !flags.IsConstructor {
+		g += "(self *" + owner.GetName() + ") "
+	}
+
+	returnType := info.GetReturnType() ; defer returnType.Free()
+	c += CType(returnType, In) + " "
+
+	g += CamelCase(info.GetName())
+	c += "gogi_" + symbol + "("
+	if owner != nil {
+		if flags.IsConstructor {
+			g += owner.GetName()
+		} else {
+			c += owner.GetObjectTypeName() + " *self"
+			if argc > 0 {
+				c += ", "
+			}
+		}
+	}
+	g += "("
+
 	args := make([]Argument, argc)
 	for i := 0; i < argc; i++ {
 		arg := info.GetArg(i)
 		args[i] = Argument{arg,arg.GetName(),"",arg.GetType()}
-		text += fmt.Sprintf("%s %s", args[i].name, GoType(args[i].typ, arg.GetDirection()))
-		wrapper += fmt.Sprintf("%s %s", CType(args[i].typ, args[i].info.GetDirection()), args[i].name)
+		g += fmt.Sprintf("%s %s", args[i].name, GoType(args[i].typ, arg.GetDirection()))
+		c += fmt.Sprintf("%s %s", CType(args[i].typ, args[i].info.GetDirection()), args[i].name)
 		if i < argc-1 {
-			text += ", "
-			wrapper += ", "
+			g += ", "
+			c += ", "
 		}
 	}
-	text += ") "
-	wrapper += ") "
+	g += ") "
+	c += ") "
 
-	// TODO: check for a return value
-	returns_value := (ret.GetTag() != VoidTag)
-	ret_gotype, ret_marshal := CToGo(ret, "retval", "c_retval")
-	if returns_value {
-		text += ret_gotype + " "
+	hasReturnValue := (returnType.GetTag() != VoidTag)
+	returnValueType, returnValueMarshal := CToGo(returnType, "retval", "c_retval")
+	if hasReturnValue {
+		g += returnValueType + " "
 	}
 
-	text += "{\n" // Go function open
-	wrapper += "{\n"
+	g += "{\n"
+	c += "{\n"
 	// marshal
 	for i := 0; i < argc; i++ {
 		args[i].cname = "c_" + args[i].name
 		ctype, marshal := GoToC(args[i].typ, args[i], args[i].cname)
-		text += fmt.Sprintf("\tvar %s %s\n", args[i].cname, ctype)
-		text += fmt.Sprintf("\t%s\n", marshal)
-		text += fmt.Sprint("\n")
+		g += fmt.Sprintf("\tvar %s %s\n", args[i].cname, ctype)
+		g += fmt.Sprintf("\t%s\n", marshal)
+		g += fmt.Sprint("\n")
 	}
 	go_argnames := make([]string, len(args))
 	c_argnames := make([]string, len(args))
@@ -78,29 +82,87 @@ func WriteFunction(info *GiInfo) (string, string) {
 		c_argnames[i] += arg.name
 	}
 
-	text += "\t"
-	if returns_value {
-		text += "c_retval, _ := "
+	g += "\t"
+	if hasReturnValue {
+		g += "c_retval, _ := "
 	}
-	text += "C.gogi_" + c_func + "(" + strings.Join(go_argnames, ", ") + ")\n"
-	if returns_value {
-		text += "\t" + ret_marshal + "\n\treturn retval\n"
+	g += "C.gogi_" + symbol + "("
+	if owner != nil && !flags.IsConstructor {
+		g += "self.ptr"
+		if argc > 0 {
+			g += ", "
+		}
+	}
+	g +=  strings.Join(go_argnames, ", ") + ")\n"
+	if hasReturnValue {
+		if owner != nil && flags.IsConstructor {
+			// wrap the return value in a Go struct
+			implName := GetImplName(owner.GetName())
+			// return &implName{(c_return_type)(retval)}
+			g += fmt.Sprintf("\treturn &%s{(%s)(retval)}\n", implName, "*C." + owner.GetObjectTypeName());
+		} else {
+			g += "\t" + returnValueMarshal + "\n\treturn retval\n"
+		}
 	}
 
 	// TODO: catch errno
-	wrapper += "\t"
-	if returns_value {
-		wrapper += "return "
+	c += "\t"
+	if hasReturnValue {
+		c += "return "
 	}
-	wrapper += c_func + "(" + strings.Join(c_argnames, ", ") + ");\n"
+	c += info.GetSymbol() + "("
+	if owner != nil && !flags.IsConstructor {
+		c += "self"
+		if argc > 0 {
+			c += ", "
+		}
+	}
+	c += strings.Join(c_argnames, ", ") + ");\n"
 
-	text += "}"
-	wrapper += "}"
+	g += "}"
+	c += "}"
 
-	return text, wrapper
+	return
 }
 
-func WriteObject(info *GiInfo) string {
-	name := info.GetName()
-	return fmt.Sprintf("type %s struct { }\n", name)
+func WriteObject(info *GiInfo) (g string, c string) {
+	iter := info
+	name := iter.GetName() ; typeName := iter.GetObjectTypeName()
+	
+	// interface
+	g += fmt.Sprintf("type %s interface {\n", name)
+	g += fmt.Sprintf("\tAs%s() *C.%s\n", name, typeName)
+	g += "}\n"
+
+	// implementation
+	if !info.IsAbstract() {
+		implName := GetImplName(name)
+		g += fmt.Sprintf("type %s struct {\n", implName)
+		g += fmt.Sprintf("\tptr *C.%s\n", typeName)
+		g += "}\n"
+
+		// ???: do this for abstract types?
+		for {
+			g += fmt.Sprintf("func (ob *%s) As%s() *C.%s {\n", implName, name, typeName)
+			g += fmt.Sprintf("\treturn (*C.%s)(ob.ptr)\n", typeName)
+			g += "}\n"
+			// ???: better way to tell when to stop?
+			if name == "Object" {
+				break
+			}
+			iter = iter.GetParent() ; defer iter.Free()
+			name = iter.GetName() ; typeName = iter.GetObjectTypeName()
+		}
+	}
+
+	// do its methods
+	method_count := info.GetNObjectMethods()
+	for i := 0; i < method_count; i++ {
+		method := info.GetObjectMethod(i)
+		g_, c_ := WriteFunction(method, info)
+		g += g_ + "\n"
+		c += c_ + "\n"
+	}
+
+	return
 }
