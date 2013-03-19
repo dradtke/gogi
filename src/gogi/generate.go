@@ -119,8 +119,8 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	}
 	c += strings.Join(c_argnames, ", ") + ");\n"
 
-	g += "}"
-	c += "}"
+	g += "}\n"
+	c += "}\n"
 
 	return
 }
@@ -163,6 +163,26 @@ func WriteObject(info *GiInfo) (g string, c string) {
 		g += g_ + "\n"
 		c += c_ + "\n"
 	}
+
+	g += "\n"
+	if c != "" {
+		c += "\n"
+	}
+
+	return
+}
+
+func WriteEnum(info *GiInfo) (g string, c string) {
+	g += fmt.Sprintf("type %s C.%s\n", info.GetName(), info.GetRegisteredTypeName())
+	g += "const (\n"
+
+	value_count := info.GetNEnumValues()
+	for i := 0; i < value_count; i++ {
+		value := info.GetEnumValue(i) ; defer value.Free()
+		// ???: how to avoid name clashes?
+		g += fmt.Sprintf("\t%s = %d\n", CamelCase(value.GetName()), value.GetValue())
+	}
+	g += ")\n"
 
 	return
 }

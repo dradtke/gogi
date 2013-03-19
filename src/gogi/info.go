@@ -282,11 +282,11 @@ func (info *GiInfo) GetRegisteredTypeInit() string {
 
 /* -- Enum Info -- */
 
-func (info *GiInfo) GetNValues() int {
+func (info *GiInfo) GetNEnumValues() int {
 	return GoInt(C.g_enum_info_get_n_values((*C.GIEnumInfo)(info.ptr)))
 }
 
-func (info *GiInfo) GetValue(n int) *GiInfo {
+func (info *GiInfo) GetEnumValue(n int) *GiInfo {
 	return NewGiInfo((*C.GIBaseInfo)(C.g_enum_info_get_value((*C.GIEnumInfo)(info.ptr), GlibInt(n))))
 }
 
@@ -300,6 +300,11 @@ func (info *GiInfo) GetEnumMethod(n int) *GiInfo {
 
 func (info *GiInfo) GetStorageType() TypeTag {
 	return (TypeTag)(C.g_enum_info_get_storage_type((*C.GIEnumInfo)(info.ptr)))
+}
+
+// this acts on GIValueInfo
+func (info *GiInfo) GetValue() int64 {
+	return (int64)(C.g_value_info_get_value((*C.GIValueInfo)(info.ptr)))
 }
 
 /* -- Object Info -- */

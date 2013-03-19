@@ -6,7 +6,7 @@ import (
 	"gogi"
 	"path/filepath"
 	"os"
-	"os/exec"
+	//"os/exec"
 	"strings"
 )
 
@@ -16,21 +16,19 @@ type Deps struct {
 }
 
 func CreatePackageRoot(pkg string) string {
-	root := filepath.Join(os.TempDir(), "gogi-" + pkg)
+	root := filepath.Join("src", pkg)
 	os.Remove(root) ; os.Mkdir(root, os.ModePerm)
 	return root
 }
 
-func OpenSourceFile(root string, pkg string) *os.File {
-	src := filepath.Join(root, "src/" + pkg)
-	os.Remove(src) ; os.MkdirAll(src, os.ModePerm)
-	f, _ := os.Create(filepath.Join(src, pkg + ".go"))
+func OpenSourceFile(root, pkg string) *os.File {
+	f, _ := os.Create(filepath.Join(root, pkg + ".go"))
 	return f
 }
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("usage: main.go <namespace>")
+		fmt.Println("usage: go run binding-generator.go <namespace>")
 		return
 	}
 
@@ -58,15 +56,23 @@ func main() {
 			go, c := gogi.WriteFunction(info, nil)
 			c_code += c + "\n"
 			go_code += go + "\n"
-		} else if info.Type == gogi.Object {
-			decl := gogi.WriteObject(info)
-			go_code += decl + "\n"
 		}
 		*/
-		if info.Type == gogi.Object && info.GetName() == "Window" {
-			g, c := gogi.WriteObject(info)
+		if info.Type == gogi.Object {
+			switch info.GetName() {
+				case "Window", "Bin", "Container", "Widget", "InitiallyUnowned", "Object":
+					g, c := gogi.WriteObject(info)
+					go_code += g + "\n"
+					if c != "" {
+						c_code += c + "\n"
+					}
+			}
+		} else if info.Type == gogi.Enum {
+			g, c := gogi.WriteEnum(info)
 			go_code += g + "\n"
-			c_code += c + "\n"
+			if c != "" {
+				c_code += c + "\n"
+			}
 		}
 	}
 
@@ -91,12 +97,14 @@ func main() {
 	f.Close()
 
 	// now build it
+	/*
 	println("Compiling...")
-	gopath := filepath.SplitList(os.Getenv("GOPATH"))
-	gopath = append(gopath, pkg_root)
-	os.Setenv("GOPATH", strings.Join(gopath, string(filepath.ListSeparator)))
 	cmd := exec.Command("go", "install", pkg)
-	cmd.Run()
+	err = cmd.Run()
+	if err != nil {
+		println(err.Error())
+	}
+	*/
 
 	println("done.")
 }

@@ -3,69 +3,16 @@ package gogi
 /*
 #cgo pkg-config: glib-2.0
 #include <glib.h>
-#include <glib-object.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <girepository.h>
 
 GList *empty_glist = NULL;
-GSList *empty_gslist = NULL;
 
-// conversions
-gint32 int_from_pointer(gpointer p) { return GPOINTER_TO_INT(p); }
-gpointer pointer_from_int(gint i) { return GINT_TO_POINTER(i); }
-guint32 uint_from_pointer(gpointer p) { return GPOINTER_TO_UINT(p); }
-gpointer pointer_from_uint(guint i) { return GUINT_TO_POINTER(i); }
-gulong size_from_pointer(gpointer p) { return GPOINTER_TO_SIZE(p); }
-gpointer pointer_from_size(gulong i) { return GSIZE_TO_POINTER(i); }
 char *from_gchar(gchar *str) { return (char*)str; }
 gchar *to_gchar(char *str) { return (gchar*)str; }
-
-// array access
-gint array_length(GArray *array) {
-	printf("C array length is %d\n", array->len);
-	return array->len;
-}
-
-GValue *array_get(GArray *array, gint i) {
-	return &g_array_index(array, GValue, i);
-}
 
 // bitflag support
 gboolean and(gint flags, gint position) {
 	return flags & position;
-}
-
-// --- Test Methods --- //
-
-static inline GValue *new_value(gpointer data, GType type) {
-	GValue *value = (GValue*)malloc(sizeof(GValue));
-	memset(value, 0, sizeof(GValue));
-	g_value_init(value, type);
-	switch (type) {
-		case G_TYPE_STRING:
-			g_value_set_string(value, data);
-			break;
-		default:
-			g_value_set_pointer(value, data);
-			break;
-	}
-	return value;
-}
-
-// return an array of strings stuffed in a gvalue
-GValue *array_test() {
-	GValue *item1 = new_value(g_strdup("hello"), G_TYPE_STRING);
-	GValue *item2 = new_value(g_strdup("world"), G_TYPE_STRING);
-
-	GArray *array = g_array_sized_new(FALSE, TRUE, sizeof(gchar*), 2);
-	g_array_insert_val(array, 0, item1);
-	g_array_insert_val(array, 1, item2);
-
-	GValue *value = new_value(array, G_TYPE_POINTER);
-
-	return value;
 }
 */
 import "C"
@@ -73,19 +20,58 @@ import (
 	"container/list"
 	"fmt"
 	"reflect"
-	"unsafe"
 )
 
+var goTypes = map[int]string {
+	(int)(C.GI_TYPE_TAG_VOID):     "",
+	(int)(C.GI_TYPE_TAG_BOOLEAN):  "bool",
+	(int)(C.GI_TYPE_TAG_INT8):     "int8",
+	(int)(C.GI_TYPE_TAG_INT16):    "int16",
+	(int)(C.GI_TYPE_TAG_INT32):    "int32",
+	(int)(C.GI_TYPE_TAG_INT64):    "int64",
+	(int)(C.GI_TYPE_TAG_UINT8):    "uint8",
+	(int)(C.GI_TYPE_TAG_UINT16):   "uint16",
+	(int)(C.GI_TYPE_TAG_UINT32):   "uint32",
+	(int)(C.GI_TYPE_TAG_UINT64):   "uint64",
+	(int)(C.GI_TYPE_TAG_FLOAT):    "float32",
+	(int)(C.GI_TYPE_TAG_DOUBLE):   "float64",
+	(int)(C.GI_TYPE_TAG_UTF8):     "string",
+	(int)(C.GI_TYPE_TAG_FILENAME): "string",
+	// skip a couple
+	(int)(C.GI_TYPE_TAG_GLIST):    "list.List",
+	(int)(C.GI_TYPE_TAG_GSLIST):   "list.List",
+	// skip a couple
+	(int)(C.GI_TYPE_TAG_UNICHAR):  "rune",
+}
+
+var cTypes = map[int]string {
+	(int)(C.GI_TYPE_TAG_VOID):     "void",
+	(int)(C.GI_TYPE_TAG_BOOLEAN):  "gboolean",
+	(int)(C.GI_TYPE_TAG_INT8):     "gint8",
+	(int)(C.GI_TYPE_TAG_INT16):    "gint16",
+	(int)(C.GI_TYPE_TAG_INT32):    "gint32",
+	(int)(C.GI_TYPE_TAG_INT64):    "gint64",
+	(int)(C.GI_TYPE_TAG_UINT8):    "guint8",
+	(int)(C.GI_TYPE_TAG_UINT16):   "guint16",
+	(int)(C.GI_TYPE_TAG_UINT32):   "guint32",
+	(int)(C.GI_TYPE_TAG_UINT64):   "guint64",
+	(int)(C.GI_TYPE_TAG_FLOAT):    "gfloat",
+	(int)(C.GI_TYPE_TAG_DOUBLE):   "gdouble",
+	(int)(C.GI_TYPE_TAG_UTF8):     "gchar",
+	(int)(C.GI_TYPE_TAG_FILENAME): "gchar",
+	// skip a couple
+	(int)(C.GI_TYPE_TAG_GLIST):    "GList*",
+	(int)(C.GI_TYPE_TAG_GSLIST):   "GSList*",
+	// skip a couple
+	(int)(C.GI_TYPE_TAG_UNICHAR):  "gunichar",
+}
+
 // returns the C type and the necessary marshaling code
-// ???: is anything below this really necessary?
 func GoToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, marshal string) {
 	govar := arg.name
 
-	var ref string
 	dir := arg.info.GetDirection()
-	if dir == Out || dir == InOut {
-		ref = "*"
-	}
+	ref := refOut(dir)
 
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
@@ -140,6 +126,14 @@ func GoToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, marshal s
 						ctype = "gint"
 						marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
 				}
+			case C.GI_TYPE_TAG_GLIST:
+				ctype = "C.GList*"
+				marshal = "// TODO: marshal glist"
+			case C.GI_TYPE_TAG_GSLIST:
+				ctype = "C.GSList*"
+				marshal = "// TODO: marshal gslist"
+			default:
+				ctype = "<MISSING CTYPE: " + TypeTagToString(tag) + ">"
 		}
 	}
 	return
@@ -166,192 +160,66 @@ func CToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, marshal 
 						gotype = "*" + interfaceInfo.GetName()
 						marshal = "// marshal?"
 				}
+			default:
+				gotype = "<MISSING GOTYPE: " + TypeTagToString(tag) + ">"
 		}
 	}
 	return
 }
 
 func GoType(typeInfo *GiInfo, dir Direction) string {
-	var result string
-
-	// TODO: refactor this and the equivalent code in CType to its own method
-	var ptr string
-	if typeInfo.IsPointer() {
-		ptr = "*"
-	}
-	var out string
-	if dir == Out || dir == InOut {
-		out = "*"
-	}
-
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
-		result += out + "[]" + GoType(typeInfo.GetParamType(0), In)
+		return (refOut(dir) + "[]" + GoType(typeInfo.GetParamType(0), In))
 	} else {
+		ptr := refPointer(typeInfo, dir)
+		val, ok := goTypes[(int)(tag)]
+		if ok {
+			return (ptr + val)
+		}
+
+		// check non-primitive tags
 		switch tag {
-			// void?
-		case C.GI_TYPE_TAG_VOID:
-			return ""
-		case C.GI_TYPE_TAG_BOOLEAN:
-			return ptr + out + "bool"
-		case C.GI_TYPE_TAG_INT8:
-			result = ptr + out + "int8"
-		case C.GI_TYPE_TAG_INT16:
-			result = ptr + out + "int16"
-		case C.GI_TYPE_TAG_INT32:
-			result = ptr + out + "int32"
-		case C.GI_TYPE_TAG_INT64:
-			result = ptr + out + "int64"
-		case C.GI_TYPE_TAG_UINT8:
-			result = ptr + out + "uint8"
-		case C.GI_TYPE_TAG_UINT16:
-			result = ptr + out + "uint16"
-		case C.GI_TYPE_TAG_UINT32:
-			result = ptr + out + "uint32"
-		case C.GI_TYPE_TAG_UINT64:
-			result = ptr + out + "uint64"
-		case C.GI_TYPE_TAG_FLOAT:
-			result = ptr + out + "float32"
-		case C.GI_TYPE_TAG_DOUBLE:
-			result = ptr + out + "float64"
-		case C.GI_TYPE_TAG_UTF8, C.GI_TYPE_TAG_FILENAME:
-			result = ptr + out + "string"
-		case C.GI_TYPE_TAG_UNICHAR:
-			result = ptr + out + "rune"
-		case C.GI_TYPE_TAG_INTERFACE:
-			interfaceType := typeInfo.GetTypeInterface()
-			switch interfaceType.Type {
-				case Enum:
-					result = interfaceType.GetName()
-				case Object:
-					result = ptr + out + interfaceType.GetName()
-			}
-		default:
-			println("[GoType] unrecognized tag:", TypeTagToString(tag))
+			case C.GI_TYPE_TAG_INTERFACE:
+				interfaceType := typeInfo.GetTypeInterface()
+				switch interfaceType.Type {
+					case Object:
+						return (ptr + interfaceType.GetName())
+					default:
+						return interfaceType.GetName()
+				}
 		}
 	}
-	return result
+
+	return "<MISSING GOTYPE: " + TypeTagToString(tag) + ">"
 }
 
 func CType(typeInfo *GiInfo, dir Direction) string {
-	var result string
-
-	var ptr string
-	if dir == Out || dir == InOut {
-		ptr += "*"
-	}
-	if typeInfo.IsPointer() {
-		ptr += "*"
-	}
-
+	ptr := refPointer(typeInfo, dir)
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
-		result = CType(typeInfo.GetParamType(0), In) + ptr
+		return CType(typeInfo.GetParamType(0), In) + ptr
 	} else {
+		val, ok := cTypes[(int)(tag)]
+		if ok {
+			return val + ptr
+		}
+
 		switch tag {
-		case C.GI_TYPE_TAG_VOID:
-			result = "void"
-		case C.GI_TYPE_TAG_BOOLEAN:
-			result = "gboolean" + ptr
-		case C.GI_TYPE_TAG_INT8:
-			result = "gint8" + ptr
-		case C.GI_TYPE_TAG_INT16:
-			result = "gint16" + ptr
-		case C.GI_TYPE_TAG_INT32:
-			result = "gint32" + ptr
-		case C.GI_TYPE_TAG_INT64:
-			result = "gint64" + ptr
-		case C.GI_TYPE_TAG_UINT8:
-			result = "guint8" + ptr
-		case C.GI_TYPE_TAG_UINT16:
-			result = "guint16" + ptr
-		case C.GI_TYPE_TAG_UINT32:
-			result = "guint32" + ptr
-		case C.GI_TYPE_TAG_UINT64:
-			result = "guint64" + ptr
-		case C.GI_TYPE_TAG_FLOAT:
-			result = "gfloat" + ptr
-		case C.GI_TYPE_TAG_DOUBLE:
-			result = "gdouble" + ptr
-		case C.GI_TYPE_TAG_UTF8, C.GI_TYPE_TAG_FILENAME:
-			result = "gchar" + ptr
-		case C.GI_TYPE_TAG_UNICHAR:
-			result = "gunichar" + ptr
-		case C.GI_TYPE_TAG_INTERFACE:
-			interfaceType := typeInfo.GetTypeInterface()
-			if interfaceType.Type == Object {
-				result = interfaceType.GetObjectTypeName() + ptr
-			} else {
-				// what the hell do we do here?
-			}
-		default:
-			println("[CType ] unrecognized tag:", TypeTagToString(tag))
+			case C.GI_TYPE_TAG_INTERFACE:
+				interfaceType := typeInfo.GetTypeInterface()
+				switch interfaceType.Type {
+					case Object:
+						return interfaceType.GetObjectTypeName() + ptr
+					default:
+						return interfaceType.GetName()
+				}
 		}
 	}
-	return result
+
+	return "<MISSING CTYPE: " + TypeTagToString(tag) + ">"
 }
 
-/* -- Pointers -- */
-
-func ToGo(ptr *C.GValue) (interface{}, reflect.Kind) {
-	typ := GoString(C.g_type_name(ptr.g_type))
-	println("Type:", typ)
-	value := C.g_value_peek_pointer(ptr)
-	switch typ {
-		case "gchar", "gint8":
-			return GoInt8((C.gint8)(C.int_from_pointer(value))), reflect.Int8
-		case "guchar", "guint8":
-			return GoUInt8((C.guint8)(C.int_from_pointer(value))), reflect.Uint8
-		case "gboolean":
-			return GoBool((C.gboolean)(C.int_from_pointer(value))), reflect.Bool
-		case "gint", "gint32":
-			return GoInt32(C.int_from_pointer(value)), reflect.Int32
-		case "guint", "guint32":
-			return GoUInt32(C.uint_from_pointer(value)), reflect.Uint32
-		case "glong", "gint64": // ???: better way to do this than using gsize?
-			return GoLong((C.glong)(C.size_from_pointer(value))), reflect.Int64
-		case "gulong", "guint64":
-			return GoULong(C.size_from_pointer(value)), reflect.Uint64
-		case "gshort", "gint16":
-			return GoInt16((C.gint16)(C.int_from_pointer(value))), reflect.Int16
-		case "gushort", "guint16":
-			return GoUInt16((C.guint16)(C.int_from_pointer(value))), reflect.Uint16
-		case "gpointer":
-			return (unsafe.Pointer)(value), reflect.Ptr
-		case "gchararray":
-			return GoString((*C.gchar)(value)), reflect.String
-	}
-	return (unsafe.Pointer)(value), reflect.Invalid
-}
-
-// Convert an arbitrary Go value into its C representation
-// TODO: create a method that takes a variable name and type tag
-// and turns it into the appropriate code to marshal it
-func ToGlib(data interface{}) C.gpointer {
-	value := reflect.ValueOf(data)
-	// TODO: fill this in
-	switch value.Kind() {
-		case reflect.Int:
-			i := GlibInt(data.(int))
-			return C.pointer_from_int(i)
-		case reflect.String:
-			gstr := GlibString(data.(string))
-			return C.gpointer(gstr)
-	}
-	ptr := value.Pointer()
-	return C.gpointer(ptr)
-}
-
-func ToSlice(array *C.GArray) []interface{} {
-	length := GoInt(C.array_length(array))
-	result := make([]interface{}, length)
-	for i := 0; i < length; i++ {
-		result[i] = C.array_get(array, (C.gint)(i))
-	}
-	return result
-}
-
-/* -- Booleans -- */
 
 func GoBool(b C.gboolean) bool {
 	if b == C.gboolean(0) {
@@ -366,8 +234,6 @@ func GlibBool(b bool) C.gboolean {
 	}
 	return C.gboolean(0)
 }
-
-/* -- Chars -- */
 
 func GoChar(c C.gchar) int8 {
 	return int8(c)
@@ -384,8 +250,6 @@ func GoUChar(c C.guchar) uint {
 func GlibUChar(i uint) C.guchar {
 	return C.guchar(i)
 }
-
-/* -- Ints -- */
 
 func GoInt(i C.gint) int {
 	return int(i)
@@ -467,8 +331,6 @@ func GlibUInt64(i uint64) C.guint64 {
 	return C.guint64(i)
 }
 
-/* -- Shorts -- */
-
 func GoShort(s C.gshort) int16 {
 	return int16(s)
 }
@@ -484,8 +346,6 @@ func GoUShort(s C.gushort) uint16 {
 func GlibUShort(s uint16) C.gushort {
 	return C.gushort(s)
 }
-
-/* -- Longs -- */
 
 func GoLong(l C.glong) int64 {
 	return int64(l)
@@ -505,8 +365,6 @@ func GlibULong(l uint64) C.gulong {
 
 // TODO: gint8, gint16, etc.
 
-/* -- Floats -- */
-
 func GoFloat(f C.gfloat) float32 {
 	return float32(f)
 }
@@ -514,8 +372,6 @@ func GoFloat(f C.gfloat) float32 {
 func GlibFloat(f float32) C.gfloat {
 	return C.gfloat(f)
 }
-
-/* -- Doubles -- */
 
 func GoDouble(d C.gdouble) float64 {
 	return float64(d)
@@ -525,8 +381,6 @@ func GlibDouble(d float64) C.gdouble {
 	return C.gdouble(d)
 }
 
-/* -- Strings -- */
-
 func GoString(str *C.gchar) string {
 	return C.GoString(C.from_gchar(str))
 }
@@ -535,58 +389,13 @@ func GlibString(str string) *C.gchar {
 	return C.to_gchar(C.CString(str))
 }
 
-// TODO: gsize, gssize, goffset, gintptr, guintptr
-
-/* -- Lists -- */
-
 func GListToGo(glist *C.GList) *list.List {
 	result := list.New()
 	for glist != C.empty_glist {
 		result.PushBack(glist.data)
 		glist = glist.next
-		/*
-		value, kind := ToGo((C.GValue)(glist.data))
-		if kind != reflect.Invalid {
-			result.PushBack(value)
-		}
-		glist = glist.next
-		*/
 	}
 	return result
-}
-
-func GSListToGo(gslist *C.GSList) *list.List {
-	result := list.New()
-	for gslist != C.empty_gslist {
-		/*
-		value, kind := ToGo(gslist.data)
-		if kind != reflect.Invalid {
-			result.PushBack(value)
-		}
-		gslist = gslist.next
-		*/
-	}
-	return result
-}
-
-func GoToGList(golist *list.List) *C.GList {
-	glist := C.empty_glist
-	for e := golist.Front(); e != nil; e = e.Next() {
-		data := ToGlib(e.Value)
-		glist = C.g_list_prepend(glist, data)
-	}
-	glist = C.g_list_reverse(glist)
-	return glist
-}
-
-func GoToGSList(golist *list.List) *C.GSList {
-	gslist := C.empty_gslist
-	for e := golist.Front(); e != nil; e = e.Next() {
-		data := ToGlib(e.Value)
-		gslist = C.g_slist_prepend(gslist, data)
-	}
-	gslist = C.g_slist_reverse(gslist)
-	return gslist
 }
 
 func PopulateFlags(data interface{}, bits C.gint, flags []C.gint) {
@@ -596,41 +405,17 @@ func PopulateFlags(data interface{}, bits C.gint, flags []C.gint) {
 	}
 }
 
-/* --- Test Methods --- */
-
-func ArrayTest() {
-	result, typ := ToGo(C.array_test())
-	if typ != reflect.Ptr {
-		println("Found non-pointer type in ArrayTest!")
-		return
+func refOut(dir Direction) string {
+	if dir == Out || dir == InOut {
+		return "*"
 	}
+	return ""
+}
 
-	// ???: get gvalue to give us more information?
-	// we know it's an array, so convert it to one
-	dirs := ToSlice((*C.GArray)(result.(unsafe.Pointer)))
-	if dirs == nil {
-		println("Failed to convert to slice")
+func refPointer(typeInfo *GiInfo, dir Direction) string {
+	ptr := refOut(dir)
+	if typeInfo.IsPointer() {
+		ptr += "*"
 	}
-
-	for _, dir := range dirs {
-		value, ok := dir.(*C.GValue)
-		if !ok {
-			continue
-		}
-
-		govalue, _ := ToGo(value)
-		_, ok = govalue.(string)
-		if !ok {
-			fmt.Println("Not a string")
-		}
-	}
-	/*
-	dirs, ok := result.([]interface{})
-	if !ok {
-		println("Type assertion to []interface{} failed.")
-		return
-	}
-
-	fmt.Printf("%v\n", dirs)
-	*/
+	return ptr
 }
