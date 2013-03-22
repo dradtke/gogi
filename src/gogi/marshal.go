@@ -153,6 +153,10 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 	if tag == ArrayTag {
 		// TODO: implement
 	} else {
+		var ptr string
+		if typeInfo.IsPointer() {
+			ptr = "*"
+		}
 		gotype = goTypes[(int)(tag)]
 		switch tag {
 			case C.GI_TYPE_TAG_BOOLEAN:
@@ -180,14 +184,14 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 				marshal = fmt.Sprintf("%s := C.GoString((*C.char)(%s))", govar, cvar)
 			case C.GI_TYPE_TAG_INTERFACE:
 				interfaceInfo := typeInfo.GetTypeInterface()
+				name := interfaceInfo.GetName()
 				switch interfaceInfo.Type {
 					case Object:
-						gotype = "*" + interfaceInfo.GetName()
-						// TODO: marshal this
-						marshal = fmt.Sprintf("%s := nil", govar)
+						gotype = ptr + name
+						marshal = fmt.Sprintf("%s := &%s{%s}", govar, GetImplName(name), cvar)
 					case Struct:
-						// TODO: marshal this
-						marshal = fmt.Sprintf("%s := nil", govar)
+						gotype = ptr + name
+						marshal = fmt.Sprintf("%s := &%s{%s}", govar, name, cvar)
 					default:
 						marshal = fmt.Sprintf("// TODO: marshal %d", interfaceInfo.Type)
 				}

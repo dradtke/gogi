@@ -311,6 +311,24 @@ func (info *GiInfo) GetValue() int64 {
 	return (int64)(C.g_value_info_get_value((*C.GIValueInfo)(info.ptr)))
 }
 
+/* -- Struct Info -- */
+
+func (info *GiInfo) GetNStructFields() int {
+	return GoInt(C.g_struct_info_get_n_fields((*C.GIStructInfo)(info.ptr)))
+}
+
+func (info *GiInfo) GetStructField(n int) *GiInfo {
+	return NewGiInfo((*C.GIBaseInfo)(C.g_struct_info_get_field((*C.GIStructInfo)(info.ptr), GlibInt(n))))
+}
+
+func (info *GiInfo) GetNStructMethods() int {
+	return GoInt(C.g_struct_info_get_n_methods((*C.GIStructInfo)(info.ptr)))
+}
+
+func (info *GiInfo) GetStructMethod(n int) *GiInfo {
+	return NewGiInfo((*C.GIBaseInfo)(C.g_struct_info_get_method((*C.GIStructInfo)(info.ptr), GlibInt(n))))
+}
+
 /* -- Object Info -- */
 
 func (info *GiInfo) GetObjectTypeName() string {
@@ -341,11 +359,11 @@ func (info *GiInfo) GetObjectInterface(n int) *GiInfo {
 	return NewGiInfo((*C.GIBaseInfo)(C.g_object_info_get_interface((*C.GIObjectInfo)(info.ptr), GlibInt(n))))
 }
 
-func (info *GiInfo) GetNFields() int {
+func (info *GiInfo) GetNObjectFields() int {
 	return GoInt(C.g_object_info_get_n_fields((*C.GIObjectInfo)(info.ptr)))
 }
 
-func (info *GiInfo) GetField(n int) *GiInfo {
+func (info *GiInfo) GetObjectField(n int) *GiInfo {
 	return NewGiInfo((*C.GIBaseInfo)(C.g_object_info_get_field((*C.GIObjectInfo)(info.ptr), GlibInt(n))))
 }
 

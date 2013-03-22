@@ -42,6 +42,10 @@ GList *get_infos(const gchar *namespace) {
 
 	return g_list_reverse(results);
 }
+
+const gchar *get_c_prefix(const gchar *namespace) {
+	return g_irepository_get_c_prefix(NULL, namespace);
+}
 */
 import "C"
 import (
@@ -50,9 +54,15 @@ import (
 	//"reflect"
 )
 
+var cPrefix string
+
 func LoadNamespace(namespace string) bool {
 	_namespace := GlibString(namespace) ; defer C.g_free((C.gpointer)(_namespace))
-	return GoBool(C.load_namespace(_namespace))
+	success := GoBool(C.load_namespace(_namespace))
+	if success {
+		cPrefix = C.GoString((*C.char)(C.get_c_prefix(_namespace)))
+	}
+	return success
 }
 
 func GetNamespaces() *list.List {

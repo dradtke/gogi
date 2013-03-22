@@ -34,10 +34,6 @@ var functionBlacklist []string = []string {
 
 // return a marshaled Go function and any necessary C wrapper
 func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
-	if info.IsDeprecated() {
-		return
-	}
-
 	symbol := info.GetSymbol()
 	if contains(symbol, functionBlacklist) {
 		return
@@ -45,6 +41,11 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 
 	flags := info.GetFunctionFlags()
 	argc := info.GetNArgs()
+
+	var ownerName string
+	if owner != nil {
+		ownerName = cPrefix + owner.GetName()
+	}
 
 	g += "func "
 	/*
@@ -72,7 +73,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		if flags.IsConstructor {
 			g += owner.GetName()
 		} else if flags.IsMethod {
-			c += owner.GetObjectTypeName() + " *self"
+			c += ownerName + " *self"
 			g += "self *" + owner.GetName()
 			if argc > 0 {
 				c += ", "
@@ -151,7 +152,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 			// wrap the return value in a Go struct
 			implName := GetImplName(owner.GetName())
 			// return &implName{(c_return_type)(retval)}
-			g += fmt.Sprintf("\treturn &%s{(%s)(retval)}\n", implName, "*C." + owner.GetObjectTypeName());
+			g += fmt.Sprintf("\treturn &%s{(%s)(retval)}\n", implName, "*C." + ownerName)
 		} else {
 			g += "\t" + returnValueMarshal + "\n\treturn retval\n"
 		}
@@ -185,37 +186,60 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	return
 }
 
-func WriteObject(info *GiInfo) (g string, c string) {
-	if info.IsDeprecated() {
-		return
+func WriteStruct(info *GiInfo) (g string, c string) {
+	name := info.GetName()
+
+	g += fmt.Sprintf("type %s struct {\n", name)
+	g += fmt.Sprintf("\tptr *C.%s\n", cPrefix + name)
+	g += "}\n"
+
+	// do its methods
+	method_count := info.GetNStructMethods()
+	for i := 0; i < method_count; i++ {
+		method := info.GetStructMethod(i)
+		if method.IsDeprecated() {
+			continue
+		}
+		g_, c_ := WriteFunction(method, info)
+		g += g_ + "\n"
+		c += c_ + "\n"
 	}
 
+	g += "\n"
+	if c != "" {
+		c += "\n"
+	}
+
+	return
+}
+
+func WriteObject(info *GiInfo) (g string, c string) {
 	iter := info
-	name := iter.GetName() ; typeName := iter.GetObjectTypeName()
+	name := iter.GetName()
 	
 	// interface
 	g += fmt.Sprintf("type %s interface {\n", name)
-	g += fmt.Sprintf("\tAs%s() *C.%s\n", name, typeName)
+	g += fmt.Sprintf("\tAs%s() *C.%s\n", name, cPrefix + name)
 	g += "}\n"
 
 	// implementation
 	if !info.IsAbstract() {
 		implName := GetImplName(name)
 		g += fmt.Sprintf("type %s struct {\n", implName)
-		g += fmt.Sprintf("\tptr *C.%s\n", typeName)
+		g += fmt.Sprintf("\tptr *C.%s\n", cPrefix + name)
 		g += "}\n"
 
 		// ???: do this for abstract types?
 		for {
-			g += fmt.Sprintf("func (ob *%s) As%s() *C.%s {\n", implName, name, typeName)
-			g += fmt.Sprintf("\treturn (*C.%s)(ob.ptr)\n", typeName)
+			g += fmt.Sprintf("func (ob *%s) As%s() *C.%s {\n", implName, name, cPrefix + name)
+			g += fmt.Sprintf("\treturn (*C.%s)(ob.ptr)\n", cPrefix + name)
 			g += "}\n"
 			// ???: better way to tell when to stop?
 			if name == "Object" || name == "ParamSpec" {
 				break
 			}
 			iter = iter.GetParent() ; defer iter.Free()
-			name = iter.GetName() ; typeName = iter.GetObjectTypeName()
+			name = iter.GetName()
 		}
 	}
 
@@ -223,6 +247,9 @@ func WriteObject(info *GiInfo) (g string, c string) {
 	method_count := info.GetNObjectMethods()
 	for i := 0; i < method_count; i++ {
 		method := info.GetObjectMethod(i)
+		if method.IsDeprecated() {
+			continue
+		}
 		g_, c_ := WriteFunction(method, info)
 		g += g_ + "\n"
 		c += c_ + "\n"
@@ -237,10 +264,6 @@ func WriteObject(info *GiInfo) (g string, c string) {
 }
 
 func WriteEnum(info *GiInfo) (g string, c string) {
-	if info.IsDeprecated() {
-		return
-	}
-
 	name := info.GetName()
 	symbol := info.GetRegisteredTypeName()
 	if symbol == "" {

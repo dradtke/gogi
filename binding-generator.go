@@ -34,13 +34,19 @@ func Process(namespace string) {
 	infos := gogi.GetInfos(namespace)
 
 	fmt.Printf("Generating bindings for %s...\n", namespace)
+
 	var c_code string
 	var go_code string
 	for _, info := range infos {
+		if info.IsDeprecated() {
+			continue
+		}
 		var g, c string
 		switch info.Type {
 			case gogi.Object:
 				g, c = gogi.WriteObject(info)
+			case gogi.Struct:
+				g, c = gogi.WriteStruct(info)
 			case gogi.Enum:
 				g, c = gogi.WriteEnum(info)
 			case gogi.Function:
