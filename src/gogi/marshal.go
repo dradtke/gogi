@@ -234,19 +234,30 @@ func CType(typeInfo *GiInfo, dir Direction) (string, string) {
 		switch tag {
 			case C.GI_TYPE_TAG_INTERFACE:
 				interfaceType := typeInfo.GetTypeInterface()
+
+				// takes care of Enum, Interface, Object, 
+				if interfaceType.IsRegisteredType() {
+					return interfaceType.GetRegisteredTypeName(), ptr
+				}
+
+				/*
 				switch interfaceType.Type {
+					case Struct:
+						return interfaceType.GetRegisteredTypeName(), ptr
 					case Enum:
-						return interfaceType.GetRegisteredTypeName(), ""
+						return interfaceType.GetRegisteredTypeName(), ptr
 					case Object:
 						return interfaceType.GetObjectTypeName(), ptr
 					default:
+						fmt.Printf("unrecognized interface type: %d [%s]\n", interfaceType.Type, interfaceType.GetName())
 						return interfaceType.GetName(), ""
 				}
+				*/
 		}
 	}
 
-	return "gint", ""
-	//return "<MISSING CTYPE: " + TypeTagToString(tag) + ">", ""
+	//return "gint", ""
+	return "<MISSING CTYPE: " + TypeTagToString(tag) + ">", ""
 }
 
 

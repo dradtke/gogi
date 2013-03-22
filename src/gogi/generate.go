@@ -24,8 +24,10 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	}
 
 	returnType := info.GetReturnType() ; defer returnType.Free()
-	retCType, _ := CType(returnType, In)
-	c += retCType + " "
+	{
+		ctype, cp := CType(returnType, In)
+		c += ctype + " " + cp
+	}
 
 	g += CamelCase(info.GetName())
 	c += "gogi_" + symbol + "("
