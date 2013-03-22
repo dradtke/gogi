@@ -20,6 +20,7 @@ import (
 	"container/list"
 	"fmt"
 	"reflect"
+	"strings"
 )
 
 var goTypes = map[int]string {
@@ -67,7 +68,7 @@ var cTypes = map[int]string {
 }
 
 // returns the C type and the necessary marshaling code
-func GoToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, marshal string) {
+func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, marshal string) {
 	govar := arg.name
 
 	dir := arg.info.GetDirection()
@@ -79,7 +80,7 @@ func GoToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, marshal s
 		switch typeInfo.GetArrayType() {
 		case C.GI_ARRAY_TYPE_C:
 			arg.name = govar + "_ar"
-			ar_ctype, _ := GoToC(typeInfo.GetParamType(0), arg, cvar + "_ar")
+			ar_ctype, _ := MarshalToC(typeInfo.GetParamType(0), arg, cvar + "_ar")
 			ctype = "*" + ar_ctype
 			cvar_len := cvar + "_len"
 			cvar_val := cvar + "_val"
@@ -91,55 +92,63 @@ func GoToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, marshal s
 					  cvar + " = (" + ref + ar_ctype + ")(unsafe.Pointer(&" + cvar_val + "))"
 		}
 	} else {
+		var p string
+		ctype, p = CType(typeInfo, dir)
+		ctype = p + "C." + ctype
 		switch tag {
+			case C.GI_TYPE_TAG_VOID:
+				if strings.HasSuffix(ctype, "C.gpointer") {
+					marshal = "// TODO: marshal gpointer"
+				}
+			case C.GI_TYPE_TAG_BOOLEAN:
+				marshal = "var " + cvar + " " + ctype + "\n\t" +
+				          "if " + (ref + govar) + " {\n\t" +
+					  "\t" + cvar + " = 1\n\t" +
+					  "} else {\n\t" +
+					  "\t" + cvar + " = 0\n\t" +
+					  "}"
 			case C.GI_TYPE_TAG_INT8:
-				ctype = "C.gint8"
 				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
 			case C.GI_TYPE_TAG_INT16:
-				ctype = "C.gint16"
 				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
 			case C.GI_TYPE_TAG_INT32:
-				ctype = "C.gint32"
 				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
 			case C.GI_TYPE_TAG_INT64:
-				ctype = "C.gint64"
 				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
 			case C.GI_TYPE_TAG_UINT8:
-				ctype = "C.guint8"
 				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
 			case C.GI_TYPE_TAG_UINT16:
-				ctype = "C.guint16"
 				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
 			case C.GI_TYPE_TAG_UINT32:
-				ctype = "C.guint32"
 				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
 			case C.GI_TYPE_TAG_UINT64:
-				ctype = "C.guint64"
 				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
 			case C.GI_TYPE_TAG_UTF8, C.GI_TYPE_TAG_FILENAME:
-				ctype = "*C.gchar"
 				marshal = "// TODO: marshal strings"
 			case C.GI_TYPE_TAG_INTERFACE:
 				interfaceInfo := typeInfo.GetTypeInterface()
 				switch interfaceInfo.Type {
 					case Enum:
-						ctype = "gint"
+						ctype = "C." + interfaceInfo.GetRegisteredTypeName()
 						marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
+					case Object:
+						marshal = fmt.Sprintf("%s = %s.As%s()", cvar, govar, interfaceInfo.GetName())
 				}
 			case C.GI_TYPE_TAG_GLIST:
-				ctype = "C.GList*"
+				ctype = "C.GList"
 				marshal = "// TODO: marshal glist"
 			case C.GI_TYPE_TAG_GSLIST:
-				ctype = "C.GSList*"
+				ctype = "C.GSList"
 				marshal = "// TODO: marshal gslist"
 			default:
-				ctype = "<MISSING CTYPE: " + TypeTagToString(tag) + ">"
+				//ctype = "<CAN'T MARSHAL TO C: " + TypeTagToString(tag) + ">"
+				ctype = "gint"
 		}
 	}
 	return
 }
 
-func CToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, marshal string) {
+func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, marshal string) {
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
 		// TODO: implement
@@ -153,6 +162,9 @@ func CToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, marshal 
 						   "} else {\n\t" +
 						   fmt.Sprintf("\t%s = true", govar) + "\n\t" +
 				           "}"
+			case C.GI_TYPE_TAG_INT8:
+				gotype = "int8"
+				marshal = fmt.Sprintf("%s = (%s)(%s)", govar, gotype, cvar)
 			case C.GI_TYPE_TAG_INTERFACE:
 				interfaceInfo := typeInfo.GetTypeInterface()
 				switch interfaceInfo.Type {
@@ -161,63 +173,80 @@ func CToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, marshal 
 						marshal = "// marshal?"
 				}
 			default:
-				gotype = "<MISSING GOTYPE: " + TypeTagToString(tag) + ">"
+				//gotype = "<CAN'T MARSHAL TO GO: " + TypeTagToString(tag) + ">"
+				gotype = "int"
 		}
 	}
 	return
 }
 
-func GoType(typeInfo *GiInfo, dir Direction) string {
+func GoType(typeInfo *GiInfo, dir Direction) (string, string) {
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
-		return (refOut(dir) + "[]" + GoType(typeInfo.GetParamType(0), In))
+		gotype, p := GoType(typeInfo.GetParamType(0), In)
+		return "[]" + gotype, p
+		//return (refOut(dir) + "[]" + GoType(typeInfo.GetParamType(0), In))
 	} else {
 		ptr := refPointer(typeInfo, dir)
 		val, ok := goTypes[(int)(tag)]
 		if ok {
-			return (ptr + val)
+			if val == "" && ptr != "" {
+				return "gpointer", ptr[1:]
+			} else {
+				return val, ptr
+			}
 		}
 
 		// check non-primitive tags
+		// TODO: find callbacks
 		switch tag {
 			case C.GI_TYPE_TAG_INTERFACE:
 				interfaceType := typeInfo.GetTypeInterface()
 				switch interfaceType.Type {
 					case Object:
-						return (ptr + interfaceType.GetName())
+						return interfaceType.GetName(), ptr
 					default:
-						return interfaceType.GetName()
+						return interfaceType.GetName(), ""
 				}
 		}
 	}
 
-	return "<MISSING GOTYPE: " + TypeTagToString(tag) + ">"
+	return "gint", ""
+	//return "<MISSING GOTYPE: " + TypeTagToString(tag) + ">", ""
 }
 
-func CType(typeInfo *GiInfo, dir Direction) string {
+func CType(typeInfo *GiInfo, dir Direction) (string, string) {
 	ptr := refPointer(typeInfo, dir)
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
-		return CType(typeInfo.GetParamType(0), In) + ptr
+		ctype, p := CType(typeInfo.GetParamType(0), In)
+		return ctype, p
 	} else {
 		val, ok := cTypes[(int)(tag)]
 		if ok {
-			return val + ptr
+			if val == "void" && ptr != "" {
+				return "gpointer", ptr[1:]
+			} else {
+				return val, ptr
+			}
 		}
 
 		switch tag {
 			case C.GI_TYPE_TAG_INTERFACE:
 				interfaceType := typeInfo.GetTypeInterface()
 				switch interfaceType.Type {
+					case Enum:
+						return interfaceType.GetRegisteredTypeName(), ""
 					case Object:
-						return interfaceType.GetObjectTypeName() + ptr
+						return interfaceType.GetObjectTypeName(), ptr
 					default:
-						return interfaceType.GetName()
+						return interfaceType.GetName(), ""
 				}
 		}
 	}
 
-	return "<MISSING CTYPE: " + TypeTagToString(tag) + ">"
+	return "gint", ""
+	//return "<MISSING CTYPE: " + TypeTagToString(tag) + ">", ""
 }
 
 

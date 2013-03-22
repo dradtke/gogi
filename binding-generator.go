@@ -51,13 +51,6 @@ func main() {
 	var c_code string
 	var go_code string
 	for _, info := range infos {
-		/*
-		if info.Type == gogi.Function {
-			go, c := gogi.WriteFunction(info, nil)
-			c_code += c + "\n"
-			go_code += go + "\n"
-		}
-		*/
 		if info.Type == gogi.Object {
 			switch info.GetName() {
 				case "Window", "Bin", "Container", "Widget", "InitiallyUnowned", "Object":

@@ -24,7 +24,8 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	}
 
 	returnType := info.GetReturnType() ; defer returnType.Free()
-	c += CType(returnType, In) + " "
+	retCType, _ := CType(returnType, In)
+	c += retCType + " "
 
 	g += CamelCase(info.GetName())
 	c += "gogi_" + symbol + "("
@@ -43,9 +44,12 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	args := make([]Argument, argc)
 	for i := 0; i < argc; i++ {
 		arg := info.GetArg(i)
+		dir := arg.GetDirection()
 		args[i] = Argument{arg,arg.GetName(),"",arg.GetType()}
-		g += fmt.Sprintf("%s %s", args[i].name, GoType(args[i].typ, arg.GetDirection()))
-		c += fmt.Sprintf("%s %s", CType(args[i].typ, args[i].info.GetDirection()), args[i].name)
+		gotype, gp := GoType(args[i].typ, dir)
+		ctype, cp := CType(args[i].typ, dir)
+		g += fmt.Sprintf("%s %s", noKeywords(args[i].name), gp + gotype)
+		c += fmt.Sprintf("%s %s", ctype, cp + args[i].name)
 		if i < argc-1 {
 			g += ", "
 			c += ", "
@@ -55,7 +59,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	c += ") "
 
 	hasReturnValue := (returnType.GetTag() != VoidTag)
-	returnValueType, returnValueMarshal := CToGo(returnType, "retval", "c_retval")
+	returnValueType, returnValueMarshal := MarshalToGo(returnType, "retval", "c_retval")
 	if hasReturnValue {
 		g += returnValueType + " "
 	}
@@ -65,7 +69,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	// marshal
 	for i := 0; i < argc; i++ {
 		args[i].cname = "c_" + args[i].name
-		ctype, marshal := GoToC(args[i].typ, args[i], args[i].cname)
+		ctype, marshal := MarshalToC(args[i].typ, args[i], args[i].cname)
 		g += fmt.Sprintf("\tvar %s %s\n", args[i].cname, ctype)
 		g += fmt.Sprintf("\t%s\n", marshal)
 		g += fmt.Sprint("\n")
@@ -185,4 +189,12 @@ func WriteEnum(info *GiInfo) (g string, c string) {
 	g += ")\n"
 
 	return
+}
+
+// some argument names overlap with Go keywords; use this method to rename them
+func noKeywords(name string) string {
+	switch name {
+		case "type": return "typ"
+	}
+	return name
 }
