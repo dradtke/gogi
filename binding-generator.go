@@ -13,6 +13,7 @@ import (
 type Deps struct {
 	Pkgs []string
 	Headers []string
+	Typedefs map[string]string
 }
 
 func CreatePackageRoot(pkg string) string {
@@ -51,6 +52,17 @@ func main() {
 	var c_code string
 	var go_code string
 	for _, info := range infos {
+		var g, c string
+		switch info.Type {
+			case gogi.Object:
+				g, c = gogi.WriteObject(info)
+			case gogi.Enum:
+				g, c = gogi.WriteEnum(info)
+			case gogi.Function:
+				g, c = gogi.WriteFunction(info, nil)
+		}
+
+		/*
 		if info.Type == gogi.Object {
 			switch info.GetName() {
 				case "Window", "Bin", "Container", "Widget", "InitiallyUnowned", "Object":
@@ -67,6 +79,10 @@ func main() {
 				c_code += c + "\n"
 			}
 		}
+		*/
+
+		if g != "" { go_code += g + "\n" }
+		if c != "" { c_code += c + "\n" }
 	}
 
 	pkg := strings.ToLower(namespace)
@@ -81,11 +97,16 @@ func main() {
 		for _, header := range deps.Headers {
 			f.WriteString(fmt.Sprintf("#include <%s>\n", header))
 		}
+		for key, value := range deps.Typedefs {
+			f.WriteString(fmt.Sprintf("#define %s %s\n", key, value))
+		}
+		f.WriteString("\n")
+		f.WriteString("GList *empty_glist = NULL;\n")
 	}
 	f.WriteString(c_code + "\n")
 	f.WriteString("*/\nimport \"C\"\n")
 	// TODO: find a way to keep track of additional imports
-	f.WriteString("import \"unsafe\"\n\n")
+	//f.WriteString("import \"unsafe\"\n\n")
 	f.WriteString(go_code)
 	f.Close()
 

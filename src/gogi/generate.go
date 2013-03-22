@@ -14,34 +14,48 @@ type Argument struct {
 
 // return a marshaled Go function and any necessary C wrapper
 func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
+	if info.IsDeprecated() {
+		return
+	}
+
 	flags := info.GetFunctionFlags()
 	symbol := info.GetSymbol()
 	argc := info.GetNArgs()
 
 	g += "func "
-	if owner != nil && !flags.IsConstructor {
+	/*
+	if owner != nil && flags.IsMethod {
 		g += "(self *" + owner.GetName() + ") "
 	}
+	*/
 
 	returnType := info.GetReturnType() ; defer returnType.Free()
 	{
 		ctype, cp := CType(returnType, In)
+		if ctype == "" {
+			g = ""; c = ""
+			return
+		} else if (ctype == "gchar" && cp != "") {
+			ctype = "const " + ctype
+		}
+
 		c += ctype + " " + cp
 	}
 
-	g += CamelCase(info.GetName())
+	g += CamelCase(info.GetName()) + "("
 	c += "gogi_" + symbol + "("
 	if owner != nil {
 		if flags.IsConstructor {
 			g += owner.GetName()
-		} else {
+		} else if flags.IsMethod {
 			c += owner.GetObjectTypeName() + " *self"
+			g += "self *" + owner.GetName()
 			if argc > 0 {
 				c += ", "
+				g += ", "
 			}
 		}
 	}
-	g += "("
 
 	args := make([]Argument, argc)
 	for i := 0; i < argc; i++ {
@@ -50,6 +64,10 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		args[i] = Argument{arg,arg.GetName(),"",arg.GetType()}
 		gotype, gp := GoType(args[i].typ, dir)
 		ctype, cp := CType(args[i].typ, dir)
+		if gotype == "" || ctype == "" {
+			g = ""; c = ""
+			return
+		}
 		g += fmt.Sprintf("%s %s", noKeywords(args[i].name), gp + gotype)
 		c += fmt.Sprintf("%s %s", ctype, cp + args[i].name)
 		if i < argc-1 {
@@ -93,7 +111,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		g += "c_retval, _ := "
 	}
 	g += "C.gogi_" + symbol + "("
-	if owner != nil && !flags.IsConstructor {
+	if owner != nil && flags.IsMethod {
 		g += "self.ptr"
 		if argc > 0 {
 			g += ", "
@@ -117,13 +135,18 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		c += "return "
 	}
 	c += info.GetSymbol() + "("
-	if owner != nil && !flags.IsConstructor {
+	if owner != nil && flags.IsMethod {
 		c += "self"
 		if argc > 0 {
 			c += ", "
 		}
 	}
-	c += strings.Join(c_argnames, ", ") + ");\n"
+	c += strings.Join(c_argnames, ", ")
+	if flags.Throws {
+		// TODO: catch the error, don't just pass in null
+		c += ", NULL"
+	}
+	c += ");\n"
 
 	g += "}\n"
 	c += "}\n"
@@ -132,6 +155,10 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 }
 
 func WriteObject(info *GiInfo) (g string, c string) {
+	if info.IsDeprecated() {
+		return
+	}
+
 	iter := info
 	name := iter.GetName() ; typeName := iter.GetObjectTypeName()
 	
@@ -179,14 +206,19 @@ func WriteObject(info *GiInfo) (g string, c string) {
 }
 
 func WriteEnum(info *GiInfo) (g string, c string) {
-	g += fmt.Sprintf("type %s C.%s\n", info.GetName(), info.GetRegisteredTypeName())
+	if info.IsDeprecated() {
+		return
+	}
+
+	name := info.GetName()
+	g += fmt.Sprintf("type %s C.%s\n", name, info.GetRegisteredTypeName())
 	g += "const (\n"
 
 	value_count := info.GetNEnumValues()
 	for i := 0; i < value_count; i++ {
 		value := info.GetEnumValue(i) ; defer value.Free()
 		// ???: how to avoid name clashes?
-		g += fmt.Sprintf("\t%s = %d\n", CamelCase(value.GetName()), value.GetValue())
+		g += fmt.Sprintf("\t%s%s = %d\n", name, CamelCase(value.GetName()), value.GetValue())
 	}
 	g += ")\n"
 

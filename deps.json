@@ -1,6 +1,11 @@
 {
 	"Gtk" : {
-		"Pkgs"    : ["gtk+-3.0"],
-		"Headers" : ["gtk/gtk.h"]
+		"Pkgs"    : ["gtk+-3.0", "cairo"],
+		"Headers" : ["gtk/gtk.h", "cairo.h"],
+		"Typedefs": {
+			"CairoRegion": "cairo_region_t",
+			"CairoContext": "cairo_t",
+			"CairoRectangleInt": "cairo_rectangle_int_t"
+		}
 	}
 }

@@ -90,6 +90,10 @@ func (info *GiInfo) GetFullName() string {
 	return strings.ToLower(GoString(C.g_base_info_get_namespace(info.ptr))) + "_" + info.GetName()
 }
 
+func (info *GiInfo) IsDeprecated() bool {
+	return GoBool(C.g_base_info_is_deprecated(info.ptr))
+}
+
 func (info *GiInfo) GetAttribute(attr string) string {
 	_attr := GlibString(attr) ; defer C.g_free((C.gpointer)(_attr))
 	return GoString(C.g_base_info_get_attribute(info.ptr, _attr))
