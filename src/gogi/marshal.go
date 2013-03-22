@@ -255,7 +255,8 @@ func CType(typeInfo *GiInfo, dir Direction) (string, string) {
 					return "", ""
 				}
 
-				fmt.Printf("unrecognized interface type: %d [%s]\n", interfaceType.Type, interfaceType.GetName())
+				// TODO: print this out to stderr
+				//fmt.Printf("unrecognized interface type: %d [%s]\n", interfaceType.Type, interfaceType.GetName())
 		}
 	}
 

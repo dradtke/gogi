@@ -180,7 +180,7 @@ func WriteObject(info *GiInfo) (g string, c string) {
 			g += fmt.Sprintf("\treturn (*C.%s)(ob.ptr)\n", typeName)
 			g += "}\n"
 			// ???: better way to tell when to stop?
-			if name == "Object" {
+			if name == "Object" || name == "ParamSpec" {
 				break
 			}
 			iter = iter.GetParent() ; defer iter.Free()
@@ -211,7 +211,12 @@ func WriteEnum(info *GiInfo) (g string, c string) {
 	}
 
 	name := info.GetName()
-	g += fmt.Sprintf("type %s C.%s\n", name, info.GetRegisteredTypeName())
+	symbol := info.GetRegisteredTypeName()
+	if symbol == "" {
+		// ???: why the hell does this happen with GLib?
+		symbol = "G" + name
+	}
+	g += fmt.Sprintf("type %s C.%s\n", name, symbol)
 	g += "const (\n"
 
 	value_count := info.GetNEnumValues()

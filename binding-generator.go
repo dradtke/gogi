@@ -16,9 +16,11 @@ type Deps struct {
 	Typedefs map[string]string
 }
 
+var knownPackages map[string]Deps
+
 func CreatePackageRoot(pkg string) string {
-	root := filepath.Join("src", pkg)
-	os.Remove(root) ; os.Mkdir(root, os.ModePerm)
+	root := filepath.Join("src/gi", pkg)
+	os.Remove(root) ; os.MkdirAll(root, os.ModePerm)
 	return root
 }
 
@@ -27,28 +29,10 @@ func OpenSourceFile(root, pkg string) *os.File {
 	return f
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("usage: go run binding-generator.go <namespace>")
-		return
-	}
+func Process(namespace string) {
+	infos := gogi.GetInfos(namespace)
 
-	knownPackages := make(map[string]Deps)
-	deps_config, _ := os.Open("deps.json")
-	deps_decoder := json.NewDecoder(deps_config)
-	deps_decoder.Decode(&knownPackages)
-	deps_config.Close()
-
-	namespace := os.Args[1]
-	gogi.Init()
-
-	infos, err := gogi.GetInfos(namespace)
-	if err != nil {
-		fmt.Printf("%s\n", err.Error())
-		return
-	}
-
-	println("Generating...")
+	fmt.Printf("Generating bindings for %s...\n", namespace)
 	var c_code string
 	var go_code string
 	for _, info := range infos {
@@ -119,6 +103,38 @@ func main() {
 		println(err.Error())
 	}
 	*/
+}
 
-	println("done.")
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("usage: go run binding-generator.go <namespace>")
+		return
+	}
+
+	knownPackages = make(map[string]Deps)
+	deps_config, _ := os.Open("deps.json")
+	deps_decoder := json.NewDecoder(deps_config)
+	deps_decoder.Decode(&knownPackages)
+	deps_config.Close()
+
+	namespace := os.Args[1]
+	gogi.Init()
+
+	loaded := gogi.LoadNamespace(namespace)
+	if !loaded {
+		fmt.Printf("Failed to load namespace '%s'\n", namespace)
+		return
+	}
+
+	dependencies := gogi.GetDependencies(namespace)
+	for _, dep := range dependencies {
+		nameAndVersion := strings.Split(dep, "-")
+		name := nameAndVersion[0]
+		//version := nameAndVersion[1]
+		Process(name)
+	}
+
+	Process(namespace)
+	fmt.Println("done.")
 }
