@@ -13,11 +13,11 @@
 	},
 	"Gtk" : {
 		"Pkgs"    : ["gtk+-3.0", "cairo"],
-		"Headers" : ["gtk/gtk.h", "cairo.h"],
+		"Headers" : ["gtk/gtk.h", "gtk/gtkx.h", "cairo.h"],
 		"Typedefs": {
-			"CairoRegion": "cairo_region_t",
-			"CairoContext": "cairo_t",
-			"CairoRectangleInt": "cairo_rectangle_int_t"
+			"cairoRegion": "cairo_region_t",
+			"cairoContext": "cairo_t",
+			"cairoRectangleInt": "cairo_rectangle_int_t"
 		},
 		"Imports" : []
 	}
