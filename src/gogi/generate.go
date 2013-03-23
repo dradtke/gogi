@@ -64,7 +64,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		args[i] = Argument{arg,arg.GetName(),"",arg.GetType()}
 		gotype, gp := GoType(args[i].typ)
 		ctype, cp := CType(args[i].typ)
-		if gotype == "" || ctype == "" || blacklist[ctype] {
+		if gotype == "" || ctype == "" || blacklist[gotype] {
 			// argument failed to marshal
 			g = ""; c = ""
 			return
@@ -150,7 +150,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 			if owner.Type == Object {
 				structName = GetImplName(structName)
 			}
-			g += fmt.Sprintf("\treturn &%s{(%s)(c_retval)}\n", structName, "*C." + ownerName)
+			g += fmt.Sprintf("\treturn &%s{C.%s(c_retval)}\n", structName, "as_" + strings.ToLower(owner.GetName()))
 		} else {
 			g += "\t" + returnValueMarshal + "\n\treturn retval\n"
 		}
