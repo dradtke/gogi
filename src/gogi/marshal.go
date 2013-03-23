@@ -261,8 +261,6 @@ func GoType(typeInfo *GiInfo) (string, string) {
 }
 
 func CType(typeInfo *GiInfo) (string, string) {
-	prefix := getPrefix(typeInfo)
-
 	var ptr string
 	if typeInfo.IsPointer() {
 		ptr = "*"
@@ -294,7 +292,7 @@ func CType(typeInfo *GiInfo) (string, string) {
 					// TODO: enable callbacks
 					return "", ""
 				} else {
-					return prefix + interfaceType.GetName(), ptr
+					return getPrefix(interfaceType) + interfaceType.GetName(), ptr
 				}
 
 				// TODO: print this out to stderr
