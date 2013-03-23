@@ -53,6 +53,13 @@ var functionBlacklist []string = []string {
 	"g_pointer_bit_trylock",
 	"g_pointer_bit_unlock",
 	"g_bytes_unref_to_data",
+	"g_file_test",
+	"g_utf8_to_utf16",
+
+	/* deprecated */
+	"g_slice_get_config",
+	"g_slice_get_config_state",
+	"g_slice_set_config",
 }
 
 var structBlacklist []string = []string {
@@ -332,11 +339,7 @@ func WriteObject(info *GiInfo) (g string, c string) {
 
 func WriteEnum(info *GiInfo) (g string, c string) {
 	name := info.GetName()
-	symbol := info.GetRegisteredTypeName()
-	if symbol == "" {
-		// ???: why the hell does this happen with GLib?
-		symbol = "G" + name
-	}
+	symbol := cPrefix + info.GetName()
 	g += fmt.Sprintf("type %s C.%s\n", name, symbol)
 	g += "const (\n"
 
@@ -344,7 +347,7 @@ func WriteEnum(info *GiInfo) (g string, c string) {
 	for i := 0; i < value_count; i++ {
 		value := info.GetEnumValue(i) ; defer value.Free()
 		// ???: how to avoid name clashes?
-		g += fmt.Sprintf("\t%s%s = %d\n", name, CamelCase(value.GetName()), value.GetValue())
+		g += fmt.Sprintf("\t%s = %d\n", enumValueName(name, CamelCase(value.GetName())), value.GetValue())
 	}
 	g += ")\n"
 
@@ -367,4 +370,8 @@ func contains(elem string, blacklist []string) bool {
 		}
 	}
 	return false
+}
+
+func enumValueName(enum, value string) string {
+	return enum + value
 }

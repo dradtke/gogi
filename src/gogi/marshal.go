@@ -43,7 +43,7 @@ var goTypes = map[int]string {
 	(int)(C.GI_TYPE_TAG_GLIST):    "list.List",
 	(int)(C.GI_TYPE_TAG_GSLIST):   "list.List",
 	// skip a couple
-	(int)(C.GI_TYPE_TAG_UNICHAR):  "rune",
+	//(int)(C.GI_TYPE_TAG_UNICHAR):  "rune",
 }
 
 var cTypes = map[int]string {
@@ -66,7 +66,7 @@ var cTypes = map[int]string {
 	(int)(C.GI_TYPE_TAG_GLIST):    "GList",
 	(int)(C.GI_TYPE_TAG_GSLIST):   "GSList",
 	// skip a couple
-	(int)(C.GI_TYPE_TAG_UNICHAR):  "gunichar",
+	//(int)(C.GI_TYPE_TAG_UNICHAR):  "gunichar",
 }
 
 // returns the C type and the necessary marshaling code
@@ -131,7 +131,7 @@ func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, mars
 				interfaceInfo := typeInfo.GetTypeInterface()
 				switch interfaceInfo.Type {
 					case Enum:
-						ctype = "C." + interfaceInfo.GetRegisteredTypeName()
+						ctype = "C." + cPrefix + interfaceInfo.GetName()
 						marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
 					case Object:
 						marshal = fmt.Sprintf("%s = %s.As%s()", cvar, govar, interfaceInfo.GetName())
