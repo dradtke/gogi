@@ -43,7 +43,7 @@ GList *get_infos(const gchar *namespace) {
 	return g_list_reverse(results);
 }
 
-const gchar *get_c_prefix(const gchar *namespace) {
+const gchar *get_c_prefix(const char *namespace) {
 	return g_irepository_get_c_prefix(NULL, namespace);
 }
 */
@@ -57,19 +57,19 @@ import (
 	"path/filepath"
 )
 
-var cPrefix string
 var cExports map[string] bool
 var cNamespace string
+var prefixes map[string]string
 var blacklist map[string] bool
 
 func LoadNamespace(namespace string) bool {
 	_namespace := GlibString(namespace) ; defer C.g_free((C.gpointer)(_namespace))
 	success := GoBool(C.load_namespace(_namespace))
 	if success {
-		cPrefix = C.GoString((*C.char)(C.get_c_prefix(_namespace)))
 		cExports = make(map[string]bool)
 		cNamespace = namespace
 
+		prefixes = make(map[string]string)
 		blacklist = make(map[string]bool)
 		content, err := ioutil.ReadFile(filepath.Join("blacklist", namespace))
 		if err != nil {
@@ -120,4 +120,15 @@ func GetInfos(namespace string) []*GiInfo {
 		results[i] = NewGiInfo(ptr)
 	}
 	return results
+}
+
+func getPrefix(info *GiInfo) string {
+	namespace := info.GetNamespace()
+	prefix, ok := prefixes[namespace]
+	if ok {
+		return prefix
+	}
+	prefix = C.GoString((*C.char)(C.get_c_prefix(C.CString(namespace))))
+	prefixes[namespace] = prefix
+	return prefix
 }

@@ -72,6 +72,7 @@ var cTypes = map[int]string {
 // returns the C type and the necessary marshaling code
 func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, marshal string) {
 	govar := noKeywords(arg.name)
+	prefix := getPrefix(typeInfo)
 
 	dir := arg.info.GetDirection()
 	ref := refOut(dir)
@@ -130,7 +131,7 @@ func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, mars
 				interfaceInfo := typeInfo.GetTypeInterface()
 				switch interfaceInfo.Type {
 					case Enum, Flags:
-						ctype = "C." + cPrefix + interfaceInfo.GetName()
+						ctype = "C." + prefix + interfaceInfo.GetName()
 						marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
 					case Object:
 						marshal = fmt.Sprintf("%s = %s.As%s()", cvar, govar, interfaceInfo.GetName())
@@ -260,6 +261,8 @@ func GoType(typeInfo *GiInfo) (string, string) {
 }
 
 func CType(typeInfo *GiInfo) (string, string) {
+	prefix := getPrefix(typeInfo)
+
 	var ptr string
 	if typeInfo.IsPointer() {
 		ptr = "*"
@@ -291,7 +294,7 @@ func CType(typeInfo *GiInfo) (string, string) {
 					// TODO: enable callbacks
 					return "", ""
 				} else {
-					return cPrefix + interfaceType.GetName(), ptr
+					return prefix + interfaceType.GetName(), ptr
 				}
 
 				// TODO: print this out to stderr

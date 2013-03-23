@@ -90,6 +90,10 @@ func (info *GiInfo) GetFullName() string {
 	return strings.ToLower(GoString(C.g_base_info_get_namespace(info.ptr))) + "_" + info.GetName()
 }
 
+func (info *GiInfo) GetNamespace() string {
+	return GoString(C.g_base_info_get_namespace(info.ptr))
+}
+
 func (info *GiInfo) IsDeprecated() bool {
 	return GoBool(C.g_base_info_is_deprecated(info.ptr))
 }

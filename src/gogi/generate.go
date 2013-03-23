@@ -19,13 +19,14 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		return
 	}
 	cExports[symbol] = true
+	prefix := getPrefix(info)
 
 	flags := info.GetFunctionFlags()
 	argc := info.GetNArgs()
 
 	var ownerName string
 	if owner != nil {
-		ownerName = cPrefix + owner.GetName()
+		ownerName = prefix + owner.GetName()
 	}
 
 	g += "func "
@@ -112,7 +113,6 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		}
 		g += fmt.Sprintf("\tvar %s %s\n", args[i].cname, ctype)
 		g += fmt.Sprintf("\t%s\n", marshal)
-		g += fmt.Sprint("\n")
 	}
 	go_argnames := make([]string, len(args))
 	c_argnames := make([]string, len(args))
@@ -195,8 +195,10 @@ func WriteStruct(info *GiInfo) (g string, c string) {
 		return
 	}
 
+	prefix := getPrefix(info)
+
 	g += fmt.Sprintf("type %s struct {\n", name)
-	g += fmt.Sprintf("\tptr *C.%s\n", cPrefix + name)
+	g += fmt.Sprintf("\tptr *C.%s\n", prefix + name)
 	g += "}\n"
 
 	// do its methods
@@ -226,17 +228,19 @@ func WriteObject(info *GiInfo) (g string, c string) {
 	if blacklist[name] {
 		return
 	}
+
+	prefix := getPrefix(info)
 	
 	// interface
 	g += fmt.Sprintf("type %s interface {\n", name)
-	g += fmt.Sprintf("\tAs%s() *C.%s\n", name, cPrefix + name)
+	g += fmt.Sprintf("\tAs%s() *C.%s\n", name, prefix + name)
 	g += "}\n"
 
 	// implementation
 	// ???: does it matter if it's abstract?
 	implName := GetImplName(name)
 	g += fmt.Sprintf("type %s struct {\n", implName)
-	g += fmt.Sprintf("\tptr *C.%s\n", cPrefix + name)
+	g += fmt.Sprintf("\tptr *C.%s\n", prefix + name)
 	g += "}\n"
 
 	// ???: do this for abstract types?
@@ -244,11 +248,11 @@ func WriteObject(info *GiInfo) (g string, c string) {
 		castFunc := "as_" + strings.ToLower(name)
 		if !cExports[castFunc] {
 			cExports[castFunc] = true
-			c += fmt.Sprintf("%s *%s(gpointer ob) {\n", cPrefix + name, castFunc)
-			c += fmt.Sprintf("\treturn (%s*)ob;\n", cPrefix + name)
+			c += fmt.Sprintf("%s *%s(gpointer ob) {\n", prefix + name, castFunc)
+			c += fmt.Sprintf("\treturn (%s*)ob;\n", prefix + name)
 			c += "}\n"
 		}
-		g += fmt.Sprintf("func (ob %s) As%s() *C.%s {\n", implName, name, cPrefix + name)
+		g += fmt.Sprintf("func (ob %s) As%s() *C.%s {\n", implName, name, prefix + name)
 		g += fmt.Sprintf("\treturn C.%s((C.gpointer)(ob.ptr))\n", castFunc)
 		g += "}\n"
 		// ???: better way to tell when to stop?
@@ -281,7 +285,8 @@ func WriteObject(info *GiInfo) (g string, c string) {
 
 func WriteEnum(info *GiInfo) (g string, c string) {
 	name := info.GetName()
-	symbol := cPrefix + info.GetName()
+	prefix := getPrefix(info)
+	symbol := prefix + info.GetName()
 	g += fmt.Sprintf("type %s C.%s\n", name, symbol)
 	g += "const (\n"
 
