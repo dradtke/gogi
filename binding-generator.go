@@ -171,6 +171,7 @@ func main() {
 
 	gogi.SetBlacklist(blacklist)
 
+	/*
 	dependencies := gogi.GetDependencies(namespace)
 	for _, dep := range dependencies {
 		nameAndVersion := strings.Split(dep, "-")
@@ -178,6 +179,7 @@ func main() {
 		//version := nameAndVersion[1]
 		Process(name)
 	}
+	*/
 
 	Process(namespace)
 	fmt.Println("done.")
