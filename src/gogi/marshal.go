@@ -96,6 +96,9 @@ func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, mars
 	} else {
 		var p string
 		ctype, p = CType(typeInfo)
+		if ctype == "" {
+			return "", ""
+		}
 		ctype = p + "C." + ctype
 		switch tag {
 			case C.GI_TYPE_TAG_VOID:
@@ -121,7 +124,7 @@ func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, mars
 			     C.GI_TYPE_TAG_FLOAT,
 			     C.GI_TYPE_TAG_DOUBLE,
 			     C.GI_TYPE_TAG_GTYPE,
-				 C.GI_TYPE_TAG_UNICHAR:
+			     C.GI_TYPE_TAG_UNICHAR:
 				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
 			case C.GI_TYPE_TAG_UTF8, C.GI_TYPE_TAG_FILENAME:
 				marshal = fmt.Sprintf("%s = (%s)(C.CString(%s))", cvar, ctype, ref + govar)
@@ -210,22 +213,24 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 }
 
 func GoType(typeInfo *GiInfo) (string, string) {
+	var ptr string
+	if typeInfo.IsPointer() {
+		ptr = "*"
+	}
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
 		gotype, p := GoType(typeInfo.GetParamType(0))
 		return "[]" + gotype, p
 		//return (refOut(dir) + "[]" + GoType(typeInfo.GetParamType(0), In))
 	} else {
-		var ptr string
-		if typeInfo.IsPointer() {
-			ptr = "*"
-		}
 		val, ok := goTypes[(int)(tag)]
 		if ok {
 			if val == "" && ptr != "" {
 				return "interface{}", ptr[1:]
 			} else if val == "string" && ptr != "" {
 				return val, ptr[1:]
+			} else {
+				return val, ptr
 			}
 		}
 
@@ -234,15 +239,24 @@ func GoType(typeInfo *GiInfo) (string, string) {
 		switch tag {
 			case C.GI_TYPE_TAG_INTERFACE:
 				interfaceType := typeInfo.GetTypeInterface()
-				return interfaceType.GetName(), ptr
+				if interfaceType.Type == Callback {
+					// TODO: enable callbacks
+					return "", ""
+				} else {
+					return interfaceType.GetName(), ptr
+				}
 		}
 	}
 
-	return "", ""
-	//return "<MISSING GOTYPE: " + TypeTagToString(tag) + ">", ""
+	//println("go unrecognized:", TypeTagToString(tag))
+	return "", ptr
 }
 
 func CType(typeInfo *GiInfo) (string, string) {
+	var ptr string
+	if typeInfo.IsPointer() {
+		ptr = "*"
+	}
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
 		// TODO: re-enable useful array functions
@@ -253,10 +267,6 @@ func CType(typeInfo *GiInfo) (string, string) {
 		*/
 		return "", ""
 	} else {
-		var ptr string
-		if typeInfo.IsPointer() {
-			ptr = "*"
-		}
 		val, ok := cTypes[(int)(tag)]
 		if ok {
 			if tag == C.GI_TYPE_TAG_VOID && ptr != "" {
@@ -270,12 +280,11 @@ func CType(typeInfo *GiInfo) (string, string) {
 			case C.GI_TYPE_TAG_INTERFACE:
 				interfaceType := typeInfo.GetTypeInterface()
 
-				if interfaceType.IsRegisteredType() {
-					name := interfaceType.GetRegisteredTypeName()
-					return name, ptr
-				} else if interfaceType.Type == Callback {
+				if interfaceType.Type == Callback {
 					// TODO: enable callbacks
 					return "", ""
+				} else {
+					return cPrefix + interfaceType.GetName(), ptr
 				}
 
 				// TODO: print this out to stderr
@@ -283,8 +292,8 @@ func CType(typeInfo *GiInfo) (string, string) {
 		}
 	}
 
-	//return "gint", ""
-	return "", ""
+	//println(" c unrecognized:", TypeTagToString(tag))
+	return "", ptr
 }
 
 

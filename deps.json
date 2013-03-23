@@ -1,7 +1,7 @@
 {
 	"GLib": {
 		"Pkgs"    : ["glib-2.0"],
-		"Headers" : ["glib.h", "glib/gstdio.h"],
+		"Headers" : ["glib.h", "glib/gstdio.h", "glib-unix.h"],
 		"Typedefs": {},
 		"Imports" : ["reflect"]
 	},

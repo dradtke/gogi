@@ -30,14 +30,39 @@ var functionBlacklist []string = []string {
 	"g_variant_parse",
 	"g_variant_type_string_scan",
 	"g_variant_type_checked_",
+	"g_bookmark_file_get_icon",
+	"g_bookmark_file_load_from_data_dirs",
+	"g_bookmark_file_get_app_info",
+	"g_bookmark_file_set_groups",
+	"g_once_init_leave",
+	"g_trash_stack_height",
+	"g_trash_stack_push",
+	"g_ascii_strtoull",
+	"g_assert_warning",
+	"g_atomic_pointer_add",
+	"g_atomic_pointer_and",
+	"g_atomic_pointer_or",
+	"g_atomic_pointer_xor",
+	"g_datalist_clear",
+}
+
+var structBlacklist []string = []string {
+	"IConv",
+	"Variant",
+	"VariantType",
+	"TestLogMsg",
+}
+
+var objectBlacklist []string = []string {
 }
 
 // return a marshaled Go function and any necessary C wrapper
 func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	symbol := info.GetSymbol()
-	if contains(symbol, functionBlacklist) {
+	if contains(symbol, functionBlacklist) || cExports[symbol] {
 		return
 	}
+	cExports[symbol] = true
 
 	flags := info.GetFunctionFlags()
 	argc := info.GetNArgs()
@@ -48,11 +73,6 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	}
 
 	g += "func "
-	/*
-	if owner != nil && flags.IsMethod {
-		g += "(self *" + owner.GetName() + ") "
-	}
-	*/
 
 	returnType := info.GetReturnType() ; defer returnType.Free()
 	{
@@ -67,35 +87,35 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		c += ctype + " " + cp
 	}
 
+	if owner != nil {
+		g += owner.GetName()
+	}
 	g += CamelCase(info.GetName()) + "("
 	c += "gogi_" + symbol + "("
-	if owner != nil {
-		if flags.IsConstructor {
-			g += owner.GetName()
-		} else if flags.IsMethod {
-			c += ownerName + " *self"
-			g += "self *" + owner.GetName()
-			if argc > 0 {
-				c += ", "
-				g += ", "
-			}
+	if owner != nil && flags.IsMethod {
+		c += ownerName + " *self"
+		g += "self *" + owner.GetName()
+		if argc > 0 {
+			g += ", "
+			c += ", "
 		}
 	}
 
 	args := make([]Argument, argc)
 	for i := 0; i < argc; i++ {
 		arg := info.GetArg(i)
-		dir := arg.GetDirection()
 		args[i] = Argument{arg,arg.GetName(),"",arg.GetType()}
 		gotype, gp := GoType(args[i].typ)
 		ctype, cp := CType(args[i].typ)
+		if gotype == "" || ctype == "" || contains(gotype, structBlacklist) || contains(gotype, objectBlacklist) {
+			// argument failed to marshal
+			g = ""; c = ""
+			return
+		}
+		dir := arg.GetDirection()
 		if dir == Out || dir == InOut {
 			cp += "*"
 			gp += "*"
-		}
-		if gotype == "" || ctype == "" {
-			g = ""; c = ""
-			return
 		}
 		g += fmt.Sprintf("%s %s", noKeywords(args[i].name), gp + gotype)
 		c += fmt.Sprintf("%s %s", ctype, cp + args[i].name)
@@ -108,8 +128,18 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	c += ") "
 
 	hasReturnValue := (returnType.GetTag() != VoidTag)
-	returnValueType, returnValueMarshal := MarshalToGo(returnType, "retval", "c_retval")
+	var returnValueType, returnValueMarshal string
 	if hasReturnValue {
+		returnValueType, returnValueMarshal = MarshalToGo(returnType, "retval", "c_retval")
+		if returnValueType == "" {
+			g = ""; c = ""
+			return
+		}
+		plainReturnType := strings.Trim(returnValueType, "*")
+		if contains(plainReturnType, structBlacklist) || contains(plainReturnType, objectBlacklist) {
+			g = ""; c = ""
+			return
+		}
 		g += returnValueType + " "
 	}
 
@@ -119,6 +149,11 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	for i := 0; i < argc; i++ {
 		args[i].cname = "c_" + args[i].name
 		ctype, marshal := MarshalToC(args[i].typ, args[i], args[i].cname)
+		// TODO: remove the check for "C.", it shouldn't be needed
+		if ctype == "" || ctype == "C." {
+			g = ""; c = ""
+			return
+		}
 		g += fmt.Sprintf("\tvar %s %s\n", args[i].cname, ctype)
 		g += fmt.Sprintf("\t%s\n", marshal)
 		g += fmt.Sprint("\n")
@@ -150,9 +185,11 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	if hasReturnValue {
 		if owner != nil && flags.IsConstructor {
 			// wrap the return value in a Go struct
-			implName := GetImplName(owner.GetName())
-			// return &implName{(c_return_type)(retval)}
-			g += fmt.Sprintf("\treturn &%s{(%s)(retval)}\n", implName, "*C." + ownerName)
+			structName := owner.GetName()
+			if owner.Type == Object {
+				structName = GetImplName(structName)
+			}
+			g += fmt.Sprintf("\treturn &%s{(%s)(c_retval)}\n", structName, "*C." + ownerName)
 		} else {
 			g += "\t" + returnValueMarshal + "\n\treturn retval\n"
 		}
@@ -172,8 +209,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	}
 	c += strings.Join(c_argnames, ", ")
 	if flags.Throws {
-		// TODO: catch the error, don't just pass in null
-		if argc > 0 {
+		if argc > 0 || flags.IsMethod {
 			c += ", "
 		}
 		c += "NULL"
@@ -187,7 +223,16 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 }
 
 func WriteStruct(info *GiInfo) (g string, c string) {
+	// for now, skip gtype and foreign structs
+	if info.IsGTypeStruct() || info.IsForeign() {
+		return
+	}
+
 	name := info.GetName()
+
+	if contains(name, structBlacklist) {
+		return
+	}
 
 	g += fmt.Sprintf("type %s struct {\n", name)
 	g += fmt.Sprintf("\tptr *C.%s\n", cPrefix + name)
@@ -216,6 +261,10 @@ func WriteStruct(info *GiInfo) (g string, c string) {
 func WriteObject(info *GiInfo) (g string, c string) {
 	iter := info
 	name := iter.GetName()
+
+	if contains(name, objectBlacklist) {
+		return
+	}
 	
 	// interface
 	g += fmt.Sprintf("type %s interface {\n", name)
@@ -288,6 +337,7 @@ func WriteEnum(info *GiInfo) (g string, c string) {
 func noKeywords(name string) string {
 	switch name {
 		case "type": return "typ"
+		case "func": return "fun"
 	}
 	return name
 }

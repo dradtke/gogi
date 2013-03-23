@@ -51,6 +51,8 @@ func Process(namespace string) {
 				g, c = gogi.WriteEnum(info)
 			case gogi.Function:
 				g, c = gogi.WriteFunction(info, nil)
+			default:
+				//fmt.Printf("unknown info '%s' of type %s\n", info.GetName(), gogi.InfoTypeToString(info.Type))
 		}
 
 		/*

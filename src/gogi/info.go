@@ -329,6 +329,14 @@ func (info *GiInfo) GetStructMethod(n int) *GiInfo {
 	return NewGiInfo((*C.GIBaseInfo)(C.g_struct_info_get_method((*C.GIStructInfo)(info.ptr), GlibInt(n))))
 }
 
+func (info *GiInfo) IsGTypeStruct() bool {
+	return GoBool(C.g_struct_info_is_gtype_struct((*C.GIStructInfo)(info.ptr)))
+}
+
+func (info *GiInfo) IsForeign() bool {
+	return GoBool(C.g_struct_info_is_foreign((*C.GIStructInfo)(info.ptr)))
+}
+
 /* -- Object Info -- */
 
 func (info *GiInfo) GetObjectTypeName() string {

@@ -55,12 +55,14 @@ import (
 )
 
 var cPrefix string
+var cExports map[string]bool
 
 func LoadNamespace(namespace string) bool {
 	_namespace := GlibString(namespace) ; defer C.g_free((C.gpointer)(_namespace))
 	success := GoBool(C.load_namespace(_namespace))
 	if success {
 		cPrefix = C.GoString((*C.char)(C.get_c_prefix(_namespace)))
+		cExports = make(map[string]bool)
 	}
 	return success
 }
