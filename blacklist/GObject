@@ -1,4 +1,17 @@
 # deprecated
 g_object_compat_control
 
+# name clash / caller allocates confusion
+g_signal_query
+
 Variant
+VaClosureMarshal
+
+# glib dependency
+Source
+
+# isn't found?
+TypePlugin
+
+# pointer issue
+TypeQuery

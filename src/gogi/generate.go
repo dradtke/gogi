@@ -50,7 +50,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	c += "gogi_" + symbol + "("
 	if owner != nil && flags.IsMethod {
 		c += ownerName + " *self"
-		g += "self *" + owner.GetName()
+		g += "self " + owner.GetName()
 		if argc > 0 {
 			g += ", "
 			c += ", "
@@ -132,7 +132,12 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	}
 	g += "C.gogi_" + symbol + "("
 	if owner != nil && flags.IsMethod {
-		g += "self.ptr"
+		switch owner.Type {
+			case Object:
+				g += "self.As" + owner.GetName() + "()"
+			default:
+				g += "self.ptr"
+		}
 		if argc > 0 {
 			g += ", "
 		}
@@ -228,24 +233,30 @@ func WriteObject(info *GiInfo) (g string, c string) {
 	g += "}\n"
 
 	// implementation
-	if !info.IsAbstract() {
-		implName := GetImplName(name)
-		g += fmt.Sprintf("type %s struct {\n", implName)
-		g += fmt.Sprintf("\tptr *C.%s\n", cPrefix + name)
-		g += "}\n"
+	// ???: does it matter if it's abstract?
+	implName := GetImplName(name)
+	g += fmt.Sprintf("type %s struct {\n", implName)
+	g += fmt.Sprintf("\tptr *C.%s\n", cPrefix + name)
+	g += "}\n"
 
-		// ???: do this for abstract types?
-		for {
-			g += fmt.Sprintf("func (ob *%s) As%s() *C.%s {\n", implName, name, cPrefix + name)
-			g += fmt.Sprintf("\treturn (*C.%s)(ob.ptr)\n", cPrefix + name)
-			g += "}\n"
-			// ???: better way to tell when to stop?
-			if name == "Object" || name == "ParamSpec" {
-				break
-			}
-			iter = iter.GetParent() ; defer iter.Free()
-			name = iter.GetName()
+	// ???: do this for abstract types?
+	for {
+		castFunc := "as_" + strings.ToLower(name)
+		if !cExports[castFunc] {
+			cExports[castFunc] = true
+			c += fmt.Sprintf("%s *%s(gpointer ob) {\n", cPrefix + name, castFunc)
+			c += fmt.Sprintf("\treturn (%s*)ob;\n", cPrefix + name)
+			c += "}\n"
 		}
+		g += fmt.Sprintf("func (ob %s) As%s() *C.%s {\n", implName, name, cPrefix + name)
+		g += fmt.Sprintf("\treturn C.%s((C.gpointer)(ob.ptr))\n", castFunc)
+		g += "}\n"
+		// ???: better way to tell when to stop?
+		if name == "Object" || name == "ParamSpec" {
+			break
+		}
+		iter = iter.GetParent() ; defer iter.Free()
+		name = iter.GetName()
 	}
 
 	// do its methods

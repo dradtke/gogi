@@ -129,11 +129,13 @@ func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, mars
 			case C.GI_TYPE_TAG_INTERFACE:
 				interfaceInfo := typeInfo.GetTypeInterface()
 				switch interfaceInfo.Type {
-					case Enum:
+					case Enum, Flags:
 						ctype = "C." + cPrefix + interfaceInfo.GetName()
 						marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
 					case Object:
 						marshal = fmt.Sprintf("%s = %s.As%s()", cvar, govar, interfaceInfo.GetName())
+					case Struct:
+						marshal = fmt.Sprintf("%s = %s.ptr", cvar, govar)
 				}
 			case C.GI_TYPE_TAG_GLIST:
 				ctype = "C.GList"
@@ -192,7 +194,8 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 				name := interfaceInfo.GetName()
 				switch interfaceInfo.Type {
 					case Object:
-						gotype = ptr + name
+						//gotype = ptr + name
+						gotype = name
 						marshal = fmt.Sprintf("%s := &%s{%s}", govar, GetImplName(name), cvar)
 					case Struct:
 						gotype = ptr + name
@@ -244,6 +247,8 @@ func GoType(typeInfo *GiInfo) (string, string) {
 				if interfaceType.Type == Callback {
 					// TODO: enable callbacks
 					return "", ""
+				} else if interfaceType.Type == Object {
+					return interfaceType.GetName(), ""
 				} else {
 					return interfaceType.GetName(), ptr
 				}
