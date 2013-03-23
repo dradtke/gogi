@@ -103,7 +103,6 @@ func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, mars
 		switch tag {
 			case C.GI_TYPE_TAG_VOID:
 				if ctype == "C.gpointer" {
-					marshal = "// TODO: marshal gpointer"
 					marshal = fmt.Sprintf("%s = (C.gpointer)(reflect.ValueOf(%s).Pointer())", cvar, ref + govar)
 				}
 			case C.GI_TYPE_TAG_BOOLEAN:
@@ -161,6 +160,10 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 		}
 		gotype = goTypes[(int)(tag)]
 		switch tag {
+			case C.GI_TYPE_TAG_VOID:
+				if ptr != "" {
+					marshal = fmt.Sprintf("%s = reflect.ValueOf(%s).Interface()", govar, cvar)
+				}
 			case C.GI_TYPE_TAG_BOOLEAN:
 				marshal = fmt.Sprintf("var %s %s\n", govar, gotype) +
 				          fmt.Sprintf("\tif %s == 0 {\n", cvar) +

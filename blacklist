@@ -1,0 +1,78 @@
+[GLib]
+# redundant functions that are better handled by Go code
+g_ascii_strtod
+g_strfreev
+g_strjoinv
+g_strtod
+g_ascii_strtoll
+g_ascii_strtoull
+g_strv_length
+
+# use the Go sync/atomic package instead
+g_atomic_pointer_compare_and_exchange
+g_atomic_pointer_set
+g_atomic_pointer_add
+g_atomic_pointer_and
+g_atomic_pointer_or
+g_atomic_pointer_xor
+
+# missing [out] annotation
+g_filename_from_uri
+g_get_charset
+g_get_filename_charsets
+g_bookmark_file_get_app_info
+g_bookmark_file_get_icon
+g_bookmark_file_load_from_data_dirs
+
+# thread-related functions; would these ever be useful?
+g_once_init_enter
+g_once_init_leave
+g_pointer_bit_lock
+g_pointer_bit_trylock
+g_pointer_bit_unlock
+
+# array marshaling not yet implemented
+g_bookmark_file_set_groups
+
+# non-return-value double pointer
+g_trash_stack_height
+g_trash_stack_push
+g_datalist_clear
+g_datalist_init
+g_datalist_set_flags
+g_datalist_get_flags
+g_datalist_unset_flags
+
+# not found (what the fuck?)
+g_variant_get_gtype
+g_strv_get_type
+
+# need to check for const modifier on parameters
+g_variant_type_string_scan
+
+# need to resolve name conflict between method and enum
+g_file_test
+
+# need to figure out how to represent UTF-16 in Go code if at all
+g_utf8_to_utf16
+
+# deprecated
+g_slice_get_config
+g_slice_get_config_state
+g_slice_set_config
+g_assert_warning
+
+# Some objects and structs
+IConv
+Variant
+VariantType
+TestLogMsg
+Mutex
+KeyFileFlags
+TraverseFlags
+RegexCompileFlags
+RegexMatchFlags
+FormatSizeFlags
+IOCondition
+LogLevelFlags
+TestTrapFlags

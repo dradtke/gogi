@@ -55,7 +55,9 @@ import (
 )
 
 var cPrefix string
-var cExports map[string]bool
+var cExports map[string] bool
+var cNamespace string
+var cBlacklist map[string] bool
 
 func LoadNamespace(namespace string) bool {
 	_namespace := GlibString(namespace) ; defer C.g_free((C.gpointer)(_namespace))
@@ -63,6 +65,7 @@ func LoadNamespace(namespace string) bool {
 	if success {
 		cPrefix = C.GoString((*C.char)(C.get_c_prefix(_namespace)))
 		cExports = make(map[string]bool)
+		cNamespace = namespace
 	}
 	return success
 }
@@ -98,4 +101,8 @@ func GetInfos(namespace string) []*GiInfo {
 		results[i] = NewGiInfo(ptr)
 	}
 	return results
+}
+
+func SetBlacklist(blacklist map[string] bool) {
+	cBlacklist = blacklist
 }

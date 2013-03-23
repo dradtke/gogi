@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"gogi"
+	"io/ioutil"
 	"path/filepath"
 	"os"
 	//"os/exec"
@@ -17,7 +18,8 @@ type Deps struct {
 	Imports []string
 }
 
-var knownPackages map[string]Deps
+var knownPackages map[string] Deps
+var blacklist map[string] bool
 
 func CreatePackageRoot(pkg string) string {
 	root := filepath.Join("src/gi", pkg)
@@ -117,21 +119,46 @@ func Process(namespace string) {
 	*/
 }
 
-
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("usage: go run binding-generator.go <namespace>")
 		return
 	}
 
-	knownPackages = make(map[string]Deps)
-	deps_config, _ := os.Open("deps.json")
-	deps_decoder := json.NewDecoder(deps_config)
-	err := deps_decoder.Decode(&knownPackages)
-	if err != nil {
-		println(err.Error())
+	{
+		knownPackages = make(map[string]Deps)
+		deps_config, _ := os.Open("deps.json")
+		deps_decoder := json.NewDecoder(deps_config)
+		err := deps_decoder.Decode(&knownPackages)
+		if err != nil {
+			println(err.Error())
+		}
+		deps_config.Close()
 	}
-	deps_config.Close()
+
+	{
+		blacklist = make(map[string]bool)
+		content, err := ioutil.ReadFile("blacklist")
+		if err != nil {
+			println("error reading blacklist:", err.Error())
+			return
+		}
+
+		lines := strings.Split(string(content), "\n")
+		var namespace string
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if len(line) == 0 || strings.HasPrefix(line, "#") {
+				continue
+			}
+
+			if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+				namespace = strings.TrimRight(strings.TrimLeft(line, "["), "]")
+			} else {
+				blacklist[namespace + "." + line] = true
+			}
+		}
+	}
 
 	namespace := os.Args[1]
 	gogi.Init()
@@ -141,6 +168,8 @@ func main() {
 		fmt.Printf("Failed to load namespace '%s'\n", namespace)
 		return
 	}
+
+	gogi.SetBlacklist(blacklist)
 
 	dependencies := gogi.GetDependencies(namespace)
 	for _, dep := range dependencies {

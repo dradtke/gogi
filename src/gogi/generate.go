@@ -12,79 +12,10 @@ type Argument struct {
 	typ *GiInfo
 }
 
-var functionBlacklist []string = []string {
-	"g_ascii_strtod",
-	"g_atomic_pointer_compare_and_exchange",
-	"g_atomic_pointer_set",
-	"g_filename_from_uri",
-	"g_get_charset",
-	"g_get_filename_charsets",
-	"g_once_init_enter",
-	"g_strfreev",
-	"g_strjoinv",
-	"g_strtod",
-	"g_strv_get_type",
-	"g_strv_length",
-	"g_unix_error_quark",
-	"g_variant_get_gtype",
-	"g_variant_parse",
-	"g_variant_type_string_scan",
-	"g_variant_type_checked_",
-	"g_bookmark_file_get_icon",
-	"g_bookmark_file_load_from_data_dirs",
-	"g_bookmark_file_get_app_info",
-	"g_bookmark_file_set_groups",
-	"g_once_init_leave",
-	"g_trash_stack_height",
-	"g_trash_stack_push",
-	"g_assert_warning",
-	"g_atomic_pointer_add",
-	"g_atomic_pointer_and",
-	"g_atomic_pointer_or",
-	"g_atomic_pointer_xor",
-	"g_datalist_clear",
-	"g_ascii_strtoll",
-	"g_ascii_strtoull",
-	"g_datalist_init",
-	"g_datalist_set_flags",
-	"g_datalist_get_flags",
-	"g_datalist_unset_flags",
-	"g_pointer_bit_lock",
-	"g_pointer_bit_trylock",
-	"g_pointer_bit_unlock",
-	"g_bytes_unref_to_data",
-	"g_file_test",
-	"g_utf8_to_utf16",
-
-	/* deprecated */
-	"g_slice_get_config",
-	"g_slice_get_config_state",
-	"g_slice_set_config",
-}
-
-var structBlacklist []string = []string {
-	"IConv",
-	"Variant",
-	"VariantType",
-	"TestLogMsg",
-	"Mutex",
-	"KeyFileFlags",
-	"TraverseFlags",
-	"RegexCompileFlags",
-	"RegexMatchFlags",
-	"FormatSizeFlags",
-	"IOCondition",
-	"LogLevelFlags",
-	"TestTrapFlags",
-}
-
-var objectBlacklist []string = []string {
-}
-
 // return a marshaled Go function and any necessary C wrapper
 func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	symbol := info.GetSymbol()
-	if contains(symbol, functionBlacklist) || cExports[symbol] {
+	if isBlacklisted(symbol) || cExports[symbol] {
 		return
 	}
 	cExports[symbol] = true
@@ -132,7 +63,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		args[i] = Argument{arg,arg.GetName(),"",arg.GetType()}
 		gotype, gp := GoType(args[i].typ)
 		ctype, cp := CType(args[i].typ)
-		if gotype == "" || ctype == "" || contains(gotype, structBlacklist) || contains(gotype, objectBlacklist) {
+		if gotype == "" || ctype == "" || isBlacklisted(gotype) {
 			// argument failed to marshal
 			g = ""; c = ""
 			return
@@ -152,7 +83,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	g += ") "
 	c += ") "
 
-	hasReturnValue := (returnType.GetTag() != VoidTag)
+	hasReturnValue := (returnType.GetTag() != VoidTag || returnType.IsPointer())
 	var returnValueType, returnValueMarshal string
 	if hasReturnValue {
 		returnValueType, returnValueMarshal = MarshalToGo(returnType, "retval", "c_retval")
@@ -161,7 +92,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 			return
 		}
 		plainReturnType := strings.Trim(returnValueType, "*")
-		if contains(plainReturnType, structBlacklist) || contains(plainReturnType, objectBlacklist) {
+		if isBlacklisted(plainReturnType) {
 			g = ""; c = ""
 			return
 		}
@@ -255,7 +186,7 @@ func WriteStruct(info *GiInfo) (g string, c string) {
 
 	name := info.GetName()
 
-	if contains(name, structBlacklist) {
+	if isBlacklisted(name) {
 		return
 	}
 
@@ -287,7 +218,7 @@ func WriteObject(info *GiInfo) (g string, c string) {
 	iter := info
 	name := iter.GetName()
 
-	if contains(name, objectBlacklist) {
+	if isBlacklisted(name) {
 		return
 	}
 	
@@ -363,13 +294,8 @@ func noKeywords(name string) string {
 	return name
 }
 
-func contains(elem string, blacklist []string) bool {
-	for _, x := range blacklist {
-		if x == elem {
-			return true
-		}
-	}
-	return false
+func isBlacklisted(str string) bool {
+	return cBlacklist[cNamespace + "." + str]
 }
 
 func enumValueName(enum, value string) string {
