@@ -64,7 +64,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		args[i] = Argument{arg,arg.GetName(),"",arg.GetType()}
 		gotype, gp := GoType(args[i].typ)
 		ctype, cp := CType(args[i].typ)
-		if gotype == "" || ctype == "" || blacklist[gotype] {
+		if gotype == "" || ctype == "" || blacklist[ctype] {
 			// argument failed to marshal
 			g = ""; c = ""
 			return
@@ -245,16 +245,18 @@ func WriteObject(info *GiInfo) (g string, c string) {
 
 	// ???: do this for abstract types?
 	for {
-		castFunc := "as_" + strings.ToLower(name)
-		if !cExports[castFunc] {
-			cExports[castFunc] = true
-			c += fmt.Sprintf("%s *%s(gpointer ob) {\n", prefix + name, castFunc)
-			c += fmt.Sprintf("\treturn (%s*)ob;\n", prefix + name)
-			c += "}\n"
+		if !blacklist[prefix + name] {
+			castFunc := "as_" + strings.ToLower(name)
+			if !cExports[castFunc] {
+				cExports[castFunc] = true
+				c += fmt.Sprintf("%s *%s(gpointer ob) {\n", prefix + name, castFunc)
+				c += fmt.Sprintf("\treturn (%s*)ob;\n", prefix + name)
+				c += "}\n"
+			}
+			g += fmt.Sprintf("func (ob %s) As%s() *C.%s {\n", implName, name, prefix + name)
+			g += fmt.Sprintf("\treturn C.%s((C.gpointer)(ob.ptr))\n", castFunc)
+			g += "}\n"
 		}
-		g += fmt.Sprintf("func (ob %s) As%s() *C.%s {\n", implName, name, prefix + name)
-		g += fmt.Sprintf("\treturn C.%s((C.gpointer)(ob.ptr))\n", castFunc)
-		g += "}\n"
 		// ???: better way to tell when to stop?
 		if name == "Object" || name == "ParamSpec" {
 			break

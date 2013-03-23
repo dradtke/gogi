@@ -17,7 +17,9 @@
 		"Typedefs": {
 			"cairoRegion": "cairo_region_t",
 			"cairoContext": "cairo_t",
-			"cairoRectangleInt": "cairo_rectangle_int_t"
+			"cairoRectangleInt": "cairo_rectangle_int_t",
+			"cairoSurface": "cairo_surface_t",
+			"cairoPattern": "cairo_pattern_t"
 		},
 		"Imports" : []
 	}
