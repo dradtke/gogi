@@ -15,7 +15,7 @@ type Argument struct {
 // return a marshaled Go function and any necessary C wrapper
 func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	symbol := info.GetSymbol()
-	if isBlacklisted(symbol) || cExports[symbol] {
+	if blacklist[symbol] || cExports[symbol] {
 		return
 	}
 	cExports[symbol] = true
@@ -63,7 +63,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		args[i] = Argument{arg,arg.GetName(),"",arg.GetType()}
 		gotype, gp := GoType(args[i].typ)
 		ctype, cp := CType(args[i].typ)
-		if gotype == "" || ctype == "" || isBlacklisted(gotype) {
+		if gotype == "" || ctype == "" || blacklist[gotype] {
 			// argument failed to marshal
 			g = ""; c = ""
 			return
@@ -92,7 +92,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 			return
 		}
 		plainReturnType := strings.Trim(returnValueType, "*")
-		if isBlacklisted(plainReturnType) {
+		if blacklist[plainReturnType] {
 			g = ""; c = ""
 			return
 		}
@@ -186,7 +186,7 @@ func WriteStruct(info *GiInfo) (g string, c string) {
 
 	name := info.GetName()
 
-	if isBlacklisted(name) {
+	if blacklist[name] {
 		return
 	}
 
@@ -218,7 +218,7 @@ func WriteObject(info *GiInfo) (g string, c string) {
 	iter := info
 	name := iter.GetName()
 
-	if isBlacklisted(name) {
+	if blacklist[name] {
 		return
 	}
 	
@@ -292,10 +292,6 @@ func noKeywords(name string) string {
 		case "func": return "fun"
 	}
 	return name
-}
-
-func isBlacklisted(str string) bool {
-	return cBlacklist[cNamespace + "." + str]
 }
 
 func enumValueName(enum, value string) string {

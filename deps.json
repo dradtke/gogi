@@ -5,6 +5,12 @@
 		"Typedefs": {},
 		"Imports" : ["reflect"]
 	},
+	"GObject": {
+		"Pkgs"    : ["gobject-2.0"],
+		"Headers" : ["glib-object.h"],
+		"Typedefs": {},
+		"Imports" : ["container/list"]
+	},
 	"Gtk" : {
 		"Pkgs"    : ["gtk+-3.0", "cairo"],
 		"Headers" : ["gtk/gtk.h", "cairo.h"],

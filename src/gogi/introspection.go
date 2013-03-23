@@ -52,12 +52,15 @@ import (
 	"container/list"
 	//"fmt"
 	//"reflect"
+	"io/ioutil"
+	"strings"
+	"path/filepath"
 )
 
 var cPrefix string
 var cExports map[string] bool
 var cNamespace string
-var cBlacklist map[string] bool
+var blacklist map[string] bool
 
 func LoadNamespace(namespace string) bool {
 	_namespace := GlibString(namespace) ; defer C.g_free((C.gpointer)(_namespace))
@@ -66,6 +69,22 @@ func LoadNamespace(namespace string) bool {
 		cPrefix = C.GoString((*C.char)(C.get_c_prefix(_namespace)))
 		cExports = make(map[string]bool)
 		cNamespace = namespace
+
+		blacklist = make(map[string]bool)
+		content, err := ioutil.ReadFile(filepath.Join("blacklist", namespace))
+		if err != nil {
+			println("error reading blacklist:", err.Error())
+		} else {
+			lines := strings.Split(string(content), "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if len(line) == 0 || strings.HasPrefix(line, "#") {
+					continue
+				}
+
+				blacklist[line] = true
+			}
+		}
 	}
 	return success
 }
@@ -101,8 +120,4 @@ func GetInfos(namespace string) []*GiInfo {
 		results[i] = NewGiInfo(ptr)
 	}
 	return results
-}
-
-func SetBlacklist(blacklist map[string] bool) {
-	cBlacklist = blacklist
 }

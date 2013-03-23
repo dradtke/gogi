@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"gogi"
-	"io/ioutil"
 	"path/filepath"
 	"os"
 	//"os/exec"
@@ -19,7 +18,6 @@ type Deps struct {
 }
 
 var knownPackages map[string] Deps
-var blacklist map[string] bool
 
 func CreatePackageRoot(pkg string) string {
 	root := filepath.Join("src/gi", pkg)
@@ -49,7 +47,7 @@ func Process(namespace string) {
 				g, c = gogi.WriteObject(info)
 			case gogi.Struct:
 				g, c = gogi.WriteStruct(info)
-			case gogi.Enum:
+			case gogi.Enum, gogi.Flags:
 				g, c = gogi.WriteEnum(info)
 			case gogi.Function:
 				g, c = gogi.WriteFunction(info, nil)
@@ -136,30 +134,6 @@ func main() {
 		deps_config.Close()
 	}
 
-	{
-		blacklist = make(map[string]bool)
-		content, err := ioutil.ReadFile("blacklist")
-		if err != nil {
-			println("error reading blacklist:", err.Error())
-			return
-		}
-
-		lines := strings.Split(string(content), "\n")
-		var namespace string
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if len(line) == 0 || strings.HasPrefix(line, "#") {
-				continue
-			}
-
-			if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-				namespace = strings.TrimRight(strings.TrimLeft(line, "["), "]")
-			} else {
-				blacklist[namespace + "." + line] = true
-			}
-		}
-	}
-
 	namespace := os.Args[1]
 	gogi.Init()
 
@@ -168,8 +142,6 @@ func main() {
 		fmt.Printf("Failed to load namespace '%s'\n", namespace)
 		return
 	}
-
-	gogi.SetBlacklist(blacklist)
 
 	/*
 	dependencies := gogi.GetDependencies(namespace)
