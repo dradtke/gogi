@@ -62,18 +62,18 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	}
 	g += CamelCase(info.GetName()) + "("
 	c += "gogi_" + symbol + "("
+
+	cArgLine := make([]string, 0)
+	gArgLine := make([]string, 0)
+
 	if owner != nil && flags.IsMethod {
-		c += prefix + ownerName + " *self"
-		g += "self "
+		cArgLine = append(cArgLine, prefix + ownerName + " *self")
+		gArg := "self "
 		if owner.Type == Struct {
-			g += "*"
+			gArg += "*"
 		}
-		g += ownerName
-		if argc > 0 {
-			g += ", " ; c += ", "
-		} else if retc > 0 {
-			c += ", "
-		}
+		gArg += ownerName
+		gArgLine = append(gArgLine, gArg)
 	}
 
 	args := make([]Argument, 0)
@@ -86,15 +86,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		ctype, cp := CType(arg.GetType())
 		if gotype == "" || ctype == "" || blacklist[gotype] {
 			// argument failed to marshal
-			g = "" ; c = ""
-			return
-		}
-
-		if i > 0 {
-			c += ", "
-			if dir == In {
-				g += ", "
-			}
+			return "", ""
 		}
 
 		name := arg.GetName()
@@ -102,15 +94,18 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		argsAndRets = append(argsAndRets, newArg)
 		if dir == In {
 			args = append(args, newArg)
-			g += fmt.Sprintf("%s %s", noKeywords(name), gp + gotype)
-			c += fmt.Sprintf("%s %s", ctype, cp + name)
+			gArgLine = append(gArgLine, fmt.Sprintf("%s %s", noKeywords(name), gp + gotype))
+			cArgLine = append(cArgLine, fmt.Sprintf("%s %s", ctype, cp + name))
 		} else if dir == Out {
 			rets = append(rets, newArg)
-			c += fmt.Sprintf("%s *%s", ctype, cp + name)
+			cArgLine = append(cArgLine, fmt.Sprintf("%s *%s", ctype, cp + name))
 		}
 	}
-	g += ") "
-	c += ") "
+	if flags.Throws {
+		cArgLine = append(cArgLine, "GError **error")
+	}
+	g += strings.Join(gArgLine, ", ") + ") "
+	c += strings.Join(cArgLine, ", ") + ") "
 
 	var returns bool
 	if returnType.GetTag() != VoidTag || returnType.IsPointer() {
@@ -119,25 +114,24 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		returns = true
 	}
 
-	var retLine string
+	retLine := make([]string, 0)
 	for i, ret := range rets {
 		retType, retMarshal := MarshalToGo(ret.typ, ret.name, ret.cname)
 		if retType == "" {
-			g = "" ; c = "" ; return
+			return "", ""
 		}
 		if blacklist[strings.Trim(retType, "*")] {
-			g = "" ; c = "" ; return
+			return "", ""
 		}
-		if i > 0 {
-			retLine += ", "
-		}
-		retLine += retType
+		retLine = append(retLine, retType)
 		rets[i].marshal = retMarshal
 	}
-	if retc > 1 {
-		retLine = "(" + retLine + ")"
+	if flags.Throws {
+		retLine = append(retLine, "error")
 	}
-	g += retLine + " "
+	if len(retLine) > 0 {
+		g += "(" + strings.Join(retLine, ", ") + ") "
+	}
 
 	g += "{\n"
 	c += "{\n"
@@ -154,20 +148,6 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		g += fmt.Sprintf("\t%s\n", marshal)
 	}
 
-	/*
-	go_argnames := make([]string, len(args))
-	c_argnames := make([]string, len(args))
-	for i, arg := range args {
-		dir := arg.info.GetDirection()
-		if dir == Out || dir == InOut {
-			go_argnames[i] += "&"
-			//c_argnames[i] += "&"
-		}
-		go_argnames[i] += arg.cname
-		c_argnames[i] += arg.name
-	}
-	*/
-
 	for i, ret := range rets {
 		if i == len(rets)-1 && returns {
 			break
@@ -175,31 +155,34 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		ctype, cp := CType(ret.typ)
 		g += fmt.Sprintf("\tvar %s %sC.%s\n", ret.cname, cp, ctype)
 	}
+	if flags.Throws {
+		g += "\tvar c_error *C.GError\n"
+	}
 	g += "\t"
 	if returns {
 		g += "c_retval := "
 	}
 
-	g += "C.gogi_" + symbol + "("
+	cgoLine := make([]string, 0)
 	if owner != nil && flags.IsMethod {
 		switch owner.Type {
 			case Object:
-				g += "self.As" + ownerName + "()"
-			default:
-				g += "self.ptr"
+				cgoLine = append(cgoLine, fmt.Sprintf("self.As%s()", ownerName))
+			case Struct:
+				cgoLine = append(cgoLine, "self.ptr")
 		}
 	}
-
-	for i, arg := range argsAndRets {
-		if i > 0 || (owner != nil && flags.IsMethod) {
-			g += ", "
-		}
+	for _, arg := range argsAndRets {
+		name := arg.cname
 		if arg.dir == Out {
-			g += "&"
+			name = "&" + name
 		}
-		g += arg.cname
+		cgoLine = append(cgoLine, name)
 	}
-	g += ")\n"
+	if flags.Throws {
+		cgoLine = append(cgoLine, "&c_error")
+	}
+	g += fmt.Sprintf("C.gogi_%s(%s)\n", symbol, strings.Join(cgoLine, ", "))
 
 	for _, ret := range rets {
 		g += "\t" + ret.marshal + "\n"
@@ -212,25 +195,17 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 			}
 			g += ret.name
 		}
+		// TODO: marshal the GError
+		if flags.Throws {
+			if retc > 0 {
+				g += ", "
+			}
+			g += "nil"
+		}
 		g += "\n"
 	}
 
 	// TODO: marshal return values back
-
-	/*
-	if hasReturnValue {
-		if owner != nil && flags.IsConstructor {
-			// wrap the return value in a Go struct
-			structName := ownerName
-			if owner.Type == Object {
-				structName = GetImplName(structName)
-			}
-			g += fmt.Sprintf("\treturn &%s{C.%s((C.gpointer)(c_retval))}\n", structName, cast)
-		} else {
-			g += "\t" + returnValueMarshal + "\n\treturn retval\n"
-		}
-	}
-	*/
 
 	// TODO: catch errno
 	c += "\t"
@@ -254,7 +229,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		if argc > 0 || flags.IsMethod {
 			c += ", "
 		}
-		c += "NULL"
+		c += "error"
 	}
 	c += ");\n"
 

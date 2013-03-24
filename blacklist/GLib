@@ -64,3 +64,6 @@ Variant
 VariantType
 TestLogMsg
 Mutex
+
+# no need for this
+g_clear_error
