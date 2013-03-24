@@ -122,6 +122,16 @@ func GetInfos(namespace string) []*GiInfo {
 	return results
 }
 
+func GetInfoByName(namespace, symbol string) *GiInfo {
+	_namespace := GlibString(namespace) ; defer C.g_free((C.gpointer)(_namespace))
+	_symbol := GlibString(symbol) ; defer C.g_free((C.gpointer)(_symbol))
+	ptr := (*C.GIBaseInfo)(C.g_irepository_find_by_name(nil, _namespace, _symbol))
+	if ptr == nil {
+		return nil
+	}
+	return NewGiInfo(ptr)
+}
+
 func getPrefix(info *GiInfo) string {
 	namespace := info.GetNamespace()
 	prefix, ok := prefixes[namespace]

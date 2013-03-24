@@ -135,7 +135,7 @@ func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, mars
 					case Object:
 						marshal = fmt.Sprintf("%s = %s.As%s()", cvar, govar, interfaceInfo.GetName())
 					case Struct:
-						marshal = fmt.Sprintf("%s = %s.ptr", cvar, govar)
+						marshal = fmt.Sprintf("%s = %s.ptr", cvar, ref + govar)
 				}
 			case C.GI_TYPE_TAG_GLIST:
 				ctype = "C.GList"
@@ -206,7 +206,7 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 			case C.GI_TYPE_TAG_GLIST, C.GI_TYPE_TAG_GSLIST:
 				gotype = "*list.List"
 				marshal = fmt.Sprintf("%s := list.New()\n", govar) +
-				          fmt.Sprintf("\tfor %s != C.EMPTY_GLIST {\n", cvar) +
+				          fmt.Sprintf("\tfor %s != nil {\n", cvar) +
 					  fmt.Sprintf("\t\t%s.PushBack(%s.data)\n", govar, cvar) +
 					  fmt.Sprintf("\t\t%s = %s.next\n", cvar, cvar) +
 					  fmt.Sprintf("\t}\n")
@@ -474,7 +474,7 @@ func GlibString(str string) *C.gchar {
 
 func GListToGo(glist *C.GList) *list.List {
 	result := list.New()
-	for glist != C.EMPTY_GLIST {
+	for glist != nil {
 		result.PushBack(glist.data)
 		glist = glist.next
 	}
