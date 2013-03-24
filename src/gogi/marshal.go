@@ -20,7 +20,7 @@ import (
 	"container/list"
 	"fmt"
 	"reflect"
-	//"strings"
+	"strings"
 )
 
 var goTypes = map[int]string {
@@ -72,10 +72,6 @@ var cTypes = map[int]string {
 // returns the C type and the necessary marshaling code
 func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, marshal string) {
 	govar := noKeywords(arg.name)
-
-	dir := arg.info.GetDirection()
-	ref := refOut(dir)
-
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
 		// do array stuff
@@ -86,12 +82,12 @@ func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, mars
 				ctype = "*" + ar_ctype
 				cvar_len := cvar + "_len"
 				cvar_val := cvar + "_val"
-				marshal = cvar_len + " := len(" + ref + govar + ")\n\t" +
+				marshal = cvar_len + " := len(" + govar + ")\n\t" +
 				          cvar_val + " := make([]" + ar_ctype + ", " + cvar_len + ")\n\t" +
 				          "for i := 0; i < " + cvar_len + "; i++ {\n\t" +
-						  "\t" + cvar_val + "[i] = (*C.gchar)(C.CString((" + ref + govar + ")[i]))\n\t" +
+						  "\t" + cvar_val + "[i] = (*C.gchar)(C.CString((" + govar + ")[i]))\n\t" +
 						  "}\n\t" +
-						  cvar + " = (" + ref + ar_ctype + ")(unsafe.Pointer(&" + cvar_val + "))"
+						  cvar + " = (" + ar_ctype + ")(unsafe.Pointer(&" + cvar_val + "))"
 		}
 	} else {
 		var p string
@@ -103,10 +99,10 @@ func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, mars
 		switch tag {
 			case C.GI_TYPE_TAG_VOID:
 				if ctype == "C.gpointer" {
-					marshal = fmt.Sprintf("%s = (C.gpointer)(reflect.ValueOf(%s).Pointer())", cvar, ref + govar)
+					marshal = fmt.Sprintf("%s = (C.gpointer)(reflect.ValueOf(%s).Pointer())", cvar, govar)
 				}
 			case C.GI_TYPE_TAG_BOOLEAN:
-				marshal = "if " + (ref + govar) + " {\n\t" +
+				marshal = "if " + govar + " {\n\t" +
 					  "\t" + cvar + " = 1\n\t" +
 					  "} else {\n\t" +
 					  "\t" + cvar + " = 0\n\t" +
@@ -123,19 +119,19 @@ func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, mars
 			     C.GI_TYPE_TAG_DOUBLE,
 			     C.GI_TYPE_TAG_GTYPE,
 			     C.GI_TYPE_TAG_UNICHAR:
-				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
+				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, govar)
 			case C.GI_TYPE_TAG_UTF8, C.GI_TYPE_TAG_FILENAME:
-				marshal = fmt.Sprintf("%s = (%s)(C.CString(%s))", cvar, ctype, ref + govar)
+				marshal = fmt.Sprintf("%s = (%s)(C.CString(%s))", cvar, ctype, govar)
 			case C.GI_TYPE_TAG_INTERFACE:
 				interfaceInfo := typeInfo.GetTypeInterface()
 				switch interfaceInfo.Type {
 					case Enum, Flags:
-						ctype = "C." + getPrefix(interfaceInfo) + interfaceInfo.GetName()
-						marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
+						ctype = "C." + GetPrefix(interfaceInfo) + interfaceInfo.GetName()
+						marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, govar)
 					case Object:
-						marshal = fmt.Sprintf("%s = %s.As%s()", cvar, govar, interfaceInfo.GetName())
+						marshal = fmt.Sprintf("%s = (%s).As%s()", cvar, govar, interfaceInfo.GetName())
 					case Struct:
-						marshal = fmt.Sprintf("%s = %s.ptr", cvar, ref + govar)
+						marshal = fmt.Sprintf("%s = (%s).ptr", cvar, govar)
 				}
 			case C.GI_TYPE_TAG_GLIST:
 				ctype = "C.GList"
@@ -167,12 +163,15 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 					marshal = fmt.Sprintf("%s = reflect.ValueOf(%s).Interface()", govar, cvar)
 				}
 			case C.GI_TYPE_TAG_BOOLEAN:
+				marshal = fmt.Sprintf("%s := %s != 0", govar, cvar)
+				/*
 				marshal = fmt.Sprintf("var %s %s\n", govar, gotype) +
 				          fmt.Sprintf("\tif %s == 0 {\n", cvar) +
 				          fmt.Sprintf("\t\t%s = false\n", govar) +
 				                      "\t} else {\n" +
 				          fmt.Sprintf("\t\t%s = true\n", govar) +
 				                      "\t}"
+						  */
 			case C.GI_TYPE_TAG_INT8,
 			     C.GI_TYPE_TAG_INT16,
 			     C.GI_TYPE_TAG_INT32,
@@ -196,7 +195,7 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 					case Object:
 						//gotype = ptr + name
 						gotype = name
-						marshal = fmt.Sprintf("%s := &%s{%s}", govar, GetImplName(name), cvar)
+						marshal = fmt.Sprintf("%s := &%s{C.as_%s((C.gpointer)(%s))}", govar, GetImplName(name), strings.ToLower(gotype), cvar)
 					case Struct:
 						gotype = ptr + name
 						marshal = fmt.Sprintf("%s := &%s{%s}", govar, name, cvar)
@@ -244,6 +243,11 @@ func GoType(typeInfo *GiInfo) (string, string) {
 		switch tag {
 			case C.GI_TYPE_TAG_INTERFACE:
 				interfaceType := typeInfo.GetTypeInterface()
+				// for now, ignore types not in this namespace
+				if interfaceType.GetNamespace() != cNamespace {
+					return "", ""
+				}
+
 				if interfaceType.Type == Callback {
 					// TODO: enable callbacks
 					return "", ""
@@ -291,7 +295,7 @@ func CType(typeInfo *GiInfo) (string, string) {
 					// TODO: enable callbacks
 					return "", ""
 				} else {
-					return getPrefix(interfaceType) + interfaceType.GetName(), ptr
+					return GetPrefix(interfaceType) + interfaceType.GetName(), ptr
 				}
 
 				// TODO: print this out to stderr

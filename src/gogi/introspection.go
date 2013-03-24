@@ -132,7 +132,7 @@ func GetInfoByName(namespace, symbol string) *GiInfo {
 	return NewGiInfo(ptr)
 }
 
-func getPrefix(info *GiInfo) string {
+func GetPrefix(info *GiInfo) string {
 	namespace := info.GetNamespace()
 	prefix, ok := prefixes[namespace]
 	if ok {

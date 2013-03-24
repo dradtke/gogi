@@ -7,9 +7,9 @@ import (
 
 type Argument struct {
 	info *GiInfo
+	typ *GiInfo
 	name string
 	cname string
-	typ *GiInfo
 }
 
 // return a marshaled Go function and any necessary C wrapper
@@ -19,10 +19,20 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		return
 	}
 	cExports[symbol] = true
-	prefix := getPrefix(info)
+	prefix := GetPrefix(info)
 
 	flags := info.GetFunctionFlags()
 	argc := info.GetNArgs()
+	retc := 0
+
+	for i := 0; i < argc; i++ {
+		dir := info.GetArg(i).GetDirection()
+		switch dir {
+			case In: // default, do nothing
+			case Out: argc-- ; retc++
+			case InOut: return "", "" // quit early
+		}
+	}
 
 	var ownerName, cast string
 	if owner != nil {
@@ -54,55 +64,73 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		c += ownerName + " *self"
 		g += "self " + owner.GetName()
 		if argc > 0 {
-			g += ", "
+			g += ", " ; c += ", "
+		} else if retc > 0 {
 			c += ", "
 		}
 	}
 
-	args := make([]Argument, argc)
-	for i := 0; i < argc; i++ {
+	args := make([]Argument, 0)
+	rets := make([]Argument, 0)
+	for i := 0; i < argc + retc; i++ {
 		arg := info.GetArg(i)
-		args[i] = Argument{arg,arg.GetName(),"",arg.GetType()}
+		dir := arg.GetDirection()
 		gotype, gp := GoType(args[i].typ)
 		ctype, cp := CType(args[i].typ)
 		if gotype == "" || ctype == "" || blacklist[gotype] {
 			// argument failed to marshal
-			g = ""; c = ""
+			g = "" ; c = ""
 			return
 		}
-		dir := arg.GetDirection()
-		if dir == Out || dir == InOut {
-			cp += "*"
-			gp += "*"
-		}
-		g += fmt.Sprintf("%s %s", noKeywords(args[i].name), gp + gotype)
-		c += fmt.Sprintf("%s %s", ctype, cp + args[i].name)
-		if i < argc-1 {
-			g += ", "
+
+		if i > 0 {
 			c += ", "
+			if dir == In {
+				g += ", "
+			}
+		}
+
+		newArg := Argument{arg,arg.GetType(),arg.GetName(),""}
+		if dir == In {
+			args = append(args, newArg)
+			g += fmt.Sprintf("%s %s", noKeywords(args[i].name), gp + gotype)
+			c += fmt.Sprintf("%s %s", ctype, cp + args[i].name)
+		} else if dir == Out {
+			rets = append(rets, newArg)
+			c += fmt.Sprintf("%s *%s", ctype, cp + arg.GetName())
 		}
 	}
 	g += ") "
 	c += ") "
 
-	hasReturnValue := (returnType.GetTag() != VoidTag || returnType.IsPointer())
-	var returnValueType, returnValueMarshal string
-	if hasReturnValue {
-		returnValueType, returnValueMarshal = MarshalToGo(returnType, "retval", "c_retval")
-		if returnValueType == "" {
-			g = ""; c = ""
-			return
-		}
-		plainReturnType := strings.Trim(returnValueType, "*")
-		if blacklist[plainReturnType] {
-			g = ""; c = ""
-			return
-		}
-		g += returnValueType + " "
+	if returnType.GetTag() != VoidTag || returnType.IsPointer() {
+		retc++
+		rets = append(rets, Argument{nil,returnType,"retval","c_retval"})
 	}
+
+	var retLine string
+	for i := 0; i < retc; i++ {
+		ret := rets[i]
+		retType, retMarshal := MarshalToGo(ret.typ, ret.name, ret.cname)
+		if retType == "" {
+			g = "" ; c = "" ; return
+		}
+		if blacklist[strings.Trim(retType, "*")] {
+			g = "" ; c = "" ; return
+		}
+		if i > 0 {
+			retLine += ", "
+		}
+		retLine += retType
+	}
+	if retc > 1 {
+		retLine = "(" + retLine + ")"
+	}
+	g += retLine
 
 	g += "{\n"
 	c += "{\n"
+	// TODO: pick it back up here
 	// marshal
 	for i := 0; i < argc; i++ {
 		args[i].cname = "c_" + args[i].name
@@ -196,7 +224,7 @@ func WriteStruct(info *GiInfo) (g string, c string) {
 		return
 	}
 
-	prefix := getPrefix(info)
+	prefix := GetPrefix(info)
 
 	g += fmt.Sprintf("type %s struct {\n", name)
 	g += fmt.Sprintf("\tptr *C.%s\n", prefix + name)
@@ -230,8 +258,8 @@ func WriteObject(info *GiInfo) (g string, c string) {
 		return
 	}
 
-	prefix := getPrefix(info)
-	
+	prefix := GetPrefix(info)
+
 	// interface
 	g += fmt.Sprintf("type %s interface {\n", name)
 	g += fmt.Sprintf("\tAs%s() *C.%s\n", name, prefix + name)
@@ -256,8 +284,12 @@ func WriteObject(info *GiInfo) (g string, c string) {
 		if name == "Object" || name == "ParamSpec" {
 			break
 		}
-		iter = iter.GetParent() ; defer iter.Free()
-		name = iter.GetName()
+		// workaround for this sometimes being written out twice
+		oldName := name
+		for name == oldName {
+			iter = iter.GetParent() ; defer iter.Free()
+			name = iter.GetName()
+		}
 	}
 
 	// do its methods
@@ -282,7 +314,7 @@ func WriteObject(info *GiInfo) (g string, c string) {
 
 func WriteEnum(info *GiInfo) (g string, c string) {
 	name := info.GetName()
-	prefix := getPrefix(info)
+	prefix := GetPrefix(info)
 	symbol := prefix + info.GetName()
 	g += fmt.Sprintf("type %s C.%s\n", name, symbol)
 	g += "const (\n"
@@ -303,6 +335,7 @@ func noKeywords(name string) string {
 	switch name {
 		case "type": return "typ"
 		case "func": return "fun"
+		case "len": return "length"
 	}
 	return name
 }

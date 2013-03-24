@@ -21,6 +21,6 @@
 			"cairoSurface": "cairo_surface_t",
 			"cairoPattern": "cairo_pattern_t"
 		},
-		"Imports" : ["container/list", "reflect"]
+		"Imports" : ["reflect"]
 	}
 }
