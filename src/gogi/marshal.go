@@ -157,6 +157,9 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 			ptr = "*"
 		}
 		gotype = goTypes[(int)(tag)]
+		if gotype != "" {
+			gotype = ptr + gotype
+		}
 		switch tag {
 			case C.GI_TYPE_TAG_VOID:
 				if ptr != "" {
@@ -197,8 +200,13 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 						gotype = name
 						marshal = fmt.Sprintf("%s := &%s{C.as_%s((C.gpointer)(%s))}", govar, GetImplName(name), strings.ToLower(gotype), cvar)
 					case Struct:
-						gotype = ptr + name
-						marshal = fmt.Sprintf("%s := &%s{%s}", govar, name, cvar)
+						//gotype = ptr + name
+						gotype = "*" + name
+						var addr string
+						if ptr == "" {
+							addr = "&"
+						}
+						marshal = fmt.Sprintf("%s := &%s{%s}", govar, name, addr + cvar)
 					default:
 						marshal = fmt.Sprintf("// TODO: marshal %d", interfaceInfo.Type)
 				}
@@ -252,7 +260,11 @@ func GoType(typeInfo *GiInfo) (string, string) {
 					// TODO: enable callbacks
 					return "", ""
 				} else if interfaceType.Type == Object {
+					// objects are interfaces, so don't include pointers
 					return interfaceType.GetName(), ""
+				} else if interfaceType.Type == Struct {
+					// always pass structs around as pointers
+					return interfaceType.GetName(), "*"
 				} else {
 					return interfaceType.GetName(), ptr
 				}

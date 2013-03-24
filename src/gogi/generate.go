@@ -8,6 +8,7 @@ import (
 type Argument struct {
 	info *GiInfo
 	typ *GiInfo
+	dir Direction
 	name string
 	cname string
 	marshal string
@@ -26,7 +27,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	argc := info.GetNArgs()
 	retc := 0
 
-	for i := 0; i < argc; i++ {
+	for i := 0; i < info.GetNArgs(); i++ {
 		dir := info.GetArg(i).GetDirection()
 		switch dir {
 			case In: // default, do nothing
@@ -37,8 +38,8 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 
 	var ownerName string
 	if owner != nil {
-		ownerName = prefix + owner.GetName()
-		castFunc(prefix, owner.GetName(), &c)
+		ownerName = owner.GetName()
+		castFunc(prefix, ownerName, &c)
 	}
 
 	g += "func "
@@ -57,13 +58,17 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	}
 
 	if owner != nil {
-		g += owner.GetName()
+		g += ownerName
 	}
 	g += CamelCase(info.GetName()) + "("
 	c += "gogi_" + symbol + "("
 	if owner != nil && flags.IsMethod {
-		c += ownerName + " *self"
-		g += "self " + owner.GetName()
+		c += prefix + ownerName + " *self"
+		g += "self "
+		if owner.Type == Struct {
+			g += "*"
+		}
+		g += ownerName
 		if argc > 0 {
 			g += ", " ; c += ", "
 		} else if retc > 0 {
@@ -93,15 +98,15 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		}
 
 		name := arg.GetName()
-		newArg := Argument{arg,arg.GetType(),name,"c_"+name,""}
+		newArg := Argument{arg,arg.GetType(),dir,name,"c_"+name,""}
 		argsAndRets = append(argsAndRets, newArg)
 		if dir == In {
 			args = append(args, newArg)
-			g += fmt.Sprintf("%s %s", noKeywords(args[i].name), gp + gotype)
-			c += fmt.Sprintf("%s %s", ctype, cp + args[i].name)
+			g += fmt.Sprintf("%s %s", noKeywords(name), gp + gotype)
+			c += fmt.Sprintf("%s %s", ctype, cp + name)
 		} else if dir == Out {
 			rets = append(rets, newArg)
-			c += fmt.Sprintf("%s *%s", ctype, cp + arg.GetName())
+			c += fmt.Sprintf("%s *%s", ctype, cp + name)
 		}
 	}
 	g += ") "
@@ -110,7 +115,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	var returns bool
 	if returnType.GetTag() != VoidTag || returnType.IsPointer() {
 		retc++
-		rets = append(rets, Argument{nil,returnType,"retval","c_retval",""})
+		rets = append(rets, Argument{nil,returnType,In,"retval","c_retval",""})
 		returns = true
 	}
 
@@ -138,8 +143,8 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	c += "{\n"
 
 	// marshal
-	for i, arg := range args {
-		ctype, marshal := MarshalToC(args[i].typ, arg, arg.cname)
+	for _, arg := range args {
+		ctype, marshal := MarshalToC(arg.typ, arg, arg.cname)
 		// TODO: remove the check for "C.", it shouldn't be needed
 		if ctype == "" || ctype == "C." {
 			g = ""; c = ""
@@ -163,30 +168,34 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	}
 	*/
 
-	g += "\t"
 	for i, ret := range rets {
-		if i > 0 {
-			g += ", "
+		if i == len(rets)-1 && returns {
+			break
 		}
-		g += ret.cname
+		ctype, cp := CType(ret.typ)
+		g += fmt.Sprintf("\tvar %s %sC.%s\n", ret.cname, cp, ctype)
 	}
-	if retc > 0 {
-		g += " := "
+	g += "\t"
+	if returns {
+		g += "c_retval := "
 	}
 
 	g += "C.gogi_" + symbol + "("
 	if owner != nil && flags.IsMethod {
 		switch owner.Type {
 			case Object:
-				g += "self.As" + owner.GetName() + "()"
+				g += "self.As" + ownerName + "()"
 			default:
 				g += "self.ptr"
 		}
 	}
 
-	for i, arg := range args {
+	for i, arg := range argsAndRets {
 		if i > 0 || (owner != nil && flags.IsMethod) {
 			g += ", "
+		}
+		if arg.dir == Out {
+			g += "&"
 		}
 		g += arg.cname
 	}
@@ -212,7 +221,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	if hasReturnValue {
 		if owner != nil && flags.IsConstructor {
 			// wrap the return value in a Go struct
-			structName := owner.GetName()
+			structName := ownerName
 			if owner.Type == Object {
 				structName = GetImplName(structName)
 			}

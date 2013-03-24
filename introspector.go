@@ -4,10 +4,14 @@ import (
 	"gogi"
 	"fmt"
 	"os"
+	"strings"
 )
 
 func Display(info *gogi.GiInfo) {
-	fmt.Println("displaying " + info.GetName())
+	name := info.GetName()
+	fmt.Println(name)
+	fmt.Println(strings.Repeat("=", len(name)))
+	fmt.Printf("type: %s\n", gogi.InfoTypeToString(info.Type))
 }
 
 func main() {
