@@ -24,9 +24,10 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	flags := info.GetFunctionFlags()
 	argc := info.GetNArgs()
 
-	var ownerName string
+	var ownerName, cast string
 	if owner != nil {
 		ownerName = prefix + owner.GetName()
+		cast = castFunc(prefix, owner.GetName(), &c)
 	}
 
 	g += "func "
@@ -150,7 +151,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 			if owner.Type == Object {
 				structName = GetImplName(structName)
 			}
-			g += fmt.Sprintf("\treturn &%s{C.%s(c_retval)}\n", structName, "as_" + strings.ToLower(owner.GetName()))
+			g += fmt.Sprintf("\treturn &%s{C.%s((C.gpointer)(c_retval))}\n", structName, cast)
 		} else {
 			g += "\t" + returnValueMarshal + "\n\treturn retval\n"
 		}
@@ -246,15 +247,9 @@ func WriteObject(info *GiInfo) (g string, c string) {
 	// ???: do this for abstract types?
 	for {
 		if !blacklist[prefix + name] {
-			castFunc := "as_" + strings.ToLower(name)
-			if !cExports[castFunc] {
-				cExports[castFunc] = true
-				c += fmt.Sprintf("%s *%s(gpointer ob) {\n", prefix + name, castFunc)
-				c += fmt.Sprintf("\treturn (%s*)ob;\n", prefix + name)
-				c += "}\n"
-			}
+			cast := castFunc(prefix, name, &c)
 			g += fmt.Sprintf("func (ob %s) As%s() *C.%s {\n", implName, name, prefix + name)
-			g += fmt.Sprintf("\treturn C.%s((C.gpointer)(ob.ptr))\n", castFunc)
+			g += fmt.Sprintf("\treturn C.%s((C.gpointer)(ob.ptr))\n", cast)
 			g += "}\n"
 		}
 		// ???: better way to tell when to stop?
@@ -303,7 +298,7 @@ func WriteEnum(info *GiInfo) (g string, c string) {
 	return
 }
 
-// some argument names overlap with Go keywords; use this method to rename them
+// Some argument names overlap with Go keywords; use this method to rename them
 func noKeywords(name string) string {
 	switch name {
 		case "type": return "typ"
@@ -312,6 +307,19 @@ func noKeywords(name string) string {
 	return name
 }
 
+// Gets the name for an enum value. Used to avoid naming conflicts
 func enumValueName(enum, value string) string {
 	return enum + value
+}
+
+// Gets the C function for casting to a specific type and writes it if it hasn't been yet
+func castFunc(prefix, n string, c *string) string {
+	name := "as_" + strings.ToLower(n)
+	if !cExports[name] {
+		cExports[name] = true
+		(*c) += fmt.Sprintf("%s *%s(gpointer ob) {\n", prefix + n, name)
+		(*c) += fmt.Sprintf("\treturn (%s*)ob;\n", prefix + n)
+		(*c) += "}\n"
+	}
+	return name
 }
