@@ -46,11 +46,29 @@ g_datalist_unset_flags
 g_variant_get_gtype
 g_strv_get_type
 
-# need to check for const modifier on parameters
+# no way to check for const modifier
 g_variant_type_string_scan
+g_date_strftime
 
 # need to resolve name conflict between method and enum
 g_file_test
+
+# incorrect annotations
+# these tend to either be missing an [out] annotation
+# or try to be both a string and an array
+g_main_context_query
+g_regex_match_all_full
+g_regex_match_full
+g_regex_replace
+g_regex_replace_literal
+g_regex_split_full
+g_regex_escape_string
+g_ascii_dtostr
+g_ascii_formatd
+g_base64_decode_inplace
+g_base64_decode_step
+g_base64_encode_close
+g_base64_encode_step
 
 # deprecated
 g_slice_get_config

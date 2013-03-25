@@ -51,7 +51,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		if ctype == "" {
 			return "", ""
 		} else if (ctype == "gchar" && cp != "" && returnType.GetTag() != ArrayTag) {
-			// don't add the const qualifier for arrays
+			// ???: add this for arrays or not?
 			ctype = "const " + ctype
 		}
 
@@ -83,28 +83,45 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	for i := 0; i < argAndRetc; i++ {
 		arg := info.GetArg(i)
 		dir := arg.GetDirection()
-		gotype, gp := GoType(arg.GetType())
-		ctype, cp := CType(arg.GetType())
+		typ := arg.GetType()
+		gotype, gp := GoType(typ)
+		ctype, cp := CType(typ)
 		if gotype == "" || ctype == "" || blacklist[gotype] {
 			// argument failed to marshal
 			return "", ""
 		}
 
 		name := arg.GetName()
+		if symbol == "g_base64_decode_inplace" && name == "text" {
+			fmt.Printf("%s (%s):\n", name, TypeTagToString(typ.GetTag()))
+			fmt.Printf("direction: %d\n", dir)
+			fmt.Printf("caller allocates: %t\n", arg.IsCallerAllocates())
+			fmt.Printf("is return value: %t\n", arg.IsReturnValue())
+			fmt.Printf("is optional: %t\n", arg.IsOptional())
+			fmt.Printf("may be null: %t\n", arg.MayBeNull())
+			fmt.Printf("ownership transfer: %d\n", arg.GetOwnershipTransfer())
+			fmt.Printf("is pointer: %t\n", arg.GetType().IsPointer())
+			fmt.Println()
+		}
 		newArg := Argument{arg,arg.GetType(),dir,name,"c_"+name,""}
 		argsAndRets = append(argsAndRets, newArg)
 		if dir == In {
 			args = append(args, newArg)
+			if ctype == "gchar" && cp != "" && typ.GetTag() != ArrayTag {
+				ctype = "const " + ctype
+			}
 			gParamLine = append(gParamLine, fmt.Sprintf("%s %s", noKeywords(name), gp + gotype))
 			cParamLine = append(cParamLine, fmt.Sprintf("%s %s", ctype, cp + name))
 		} else if dir == Out {
 			rets = append(rets, newArg)
-			cParamLine = append(cParamLine, fmt.Sprintf("%s *%s", ctype, cp + name))
+			cp += "*"
+			cParamLine = append(cParamLine, fmt.Sprintf("%s %s", ctype, cp + name))
 		} else if dir == InOut {
 			args = append(args, newArg)
 			rets = append(rets, newArg)
+			cp += "*"
 			gParamLine = append(gParamLine, fmt.Sprintf("%s %s", noKeywords(name), gp + gotype))
-			cParamLine = append(cParamLine, fmt.Sprintf("%s *%s", ctype, cp + name))
+			cParamLine = append(cParamLine, fmt.Sprintf("%s %s", ctype, cp + name))
 		}
 	}
 	if flags.Throws {
@@ -159,6 +176,11 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		}
 		if ret.dir == Out {
 			ctype, cp := CType(ret.typ)
+			/*
+			if ret.info.IsCallerAllocates() && cp != "" {
+				cp = cp[1:]
+			}
+			*/
 			g += fmt.Sprintf("\tvar %s %sC.%s\n", ret.cname, cp, ctype)
 		}
 	}
