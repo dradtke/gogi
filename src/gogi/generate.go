@@ -25,14 +25,15 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 
 	flags := info.GetFunctionFlags()
 	argc := info.GetNArgs()
+	argAndRetc := argc
 	retc := 0
 
-	for i := 0; i < info.GetNArgs(); i++ {
+	for i := 0; i < argAndRetc; i++ {
 		dir := info.GetArg(i).GetDirection()
 		switch dir {
 			case In: // default, do nothing
 			case Out: argc-- ; retc++
-			case InOut: return "", "" // quit early
+			case InOut: retc++
 		}
 	}
 
@@ -48,9 +49,9 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	{
 		ctype, cp := CType(returnType)
 		if ctype == "" {
-			g = ""; c = ""
-			return
-		} else if (ctype == "gchar" && cp != "") {
+			return "", ""
+		} else if (ctype == "gchar" && cp != "" && returnType.GetTag() != ArrayTag) {
+			// don't add the const qualifier for arrays
 			ctype = "const " + ctype
 		}
 
@@ -63,23 +64,23 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	g += CamelCase(info.GetName()) + "("
 	c += "gogi_" + symbol + "("
 
-	cArgLine := make([]string, 0)
-	gArgLine := make([]string, 0)
+	cParamLine := make([]string, 0)
+	gParamLine := make([]string, 0)
 
 	if owner != nil && flags.IsMethod {
-		cArgLine = append(cArgLine, prefix + ownerName + " *self")
+		cParamLine = append(cParamLine, prefix + ownerName + " *self")
 		gArg := "self "
 		if owner.Type == Struct {
 			gArg += "*"
 		}
 		gArg += ownerName
-		gArgLine = append(gArgLine, gArg)
+		gParamLine = append(gParamLine, gArg)
 	}
 
 	args := make([]Argument, 0)
 	rets := make([]Argument, 0)
 	argsAndRets := make([]Argument, 0)
-	for i := 0; i < argc + retc; i++ {
+	for i := 0; i < argAndRetc; i++ {
 		arg := info.GetArg(i)
 		dir := arg.GetDirection()
 		gotype, gp := GoType(arg.GetType())
@@ -94,18 +95,23 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		argsAndRets = append(argsAndRets, newArg)
 		if dir == In {
 			args = append(args, newArg)
-			gArgLine = append(gArgLine, fmt.Sprintf("%s %s", noKeywords(name), gp + gotype))
-			cArgLine = append(cArgLine, fmt.Sprintf("%s %s", ctype, cp + name))
+			gParamLine = append(gParamLine, fmt.Sprintf("%s %s", noKeywords(name), gp + gotype))
+			cParamLine = append(cParamLine, fmt.Sprintf("%s %s", ctype, cp + name))
 		} else if dir == Out {
 			rets = append(rets, newArg)
-			cArgLine = append(cArgLine, fmt.Sprintf("%s *%s", ctype, cp + name))
+			cParamLine = append(cParamLine, fmt.Sprintf("%s *%s", ctype, cp + name))
+		} else if dir == InOut {
+			args = append(args, newArg)
+			rets = append(rets, newArg)
+			gParamLine = append(gParamLine, fmt.Sprintf("%s %s", noKeywords(name), gp + gotype))
+			cParamLine = append(cParamLine, fmt.Sprintf("%s *%s", ctype, cp + name))
 		}
 	}
 	if flags.Throws {
-		cArgLine = append(cArgLine, "GError **error")
+		cParamLine = append(cParamLine, "GError **error")
 	}
-	g += strings.Join(gArgLine, ", ") + ") "
-	c += strings.Join(cArgLine, ", ") + ") "
+	g += strings.Join(gParamLine, ", ") + ") "
+	c += strings.Join(cParamLine, ", ") + ") "
 
 	var returns bool
 	if returnType.GetTag() != VoidTag || returnType.IsPointer() {
@@ -114,23 +120,23 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		returns = true
 	}
 
-	retLine := make([]string, 0)
+	gParamLine = make([]string, 0)
 	for i, ret := range rets {
-		retType, retMarshal := MarshalToGo(ret.typ, ret.name, ret.cname)
+		retType, retMarshal := MarshalToGo(ret)
 		if retType == "" {
 			return "", ""
 		}
 		if blacklist[strings.Trim(retType, "*")] {
 			return "", ""
 		}
-		retLine = append(retLine, retType)
+		gParamLine = append(gParamLine, retType)
 		rets[i].marshal = retMarshal
 	}
 	if flags.Throws {
-		retLine = append(retLine, "error")
+		gParamLine = append(gParamLine, "error")
 	}
-	if len(retLine) > 0 {
-		g += "(" + strings.Join(retLine, ", ") + ") "
+	if len(gParamLine) > 0 {
+		g += "(" + strings.Join(gParamLine, ", ") + ") "
 	}
 
 	g += "{\n"
@@ -138,11 +144,10 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 
 	// marshal
 	for _, arg := range args {
-		ctype, marshal := MarshalToC(arg.typ, arg, arg.cname)
+		ctype, marshal := MarshalToC(arg)
 		// TODO: remove the check for "C.", it shouldn't be needed
 		if ctype == "" || ctype == "C." {
-			g = ""; c = ""
-			return
+			return "", ""
 		}
 		g += fmt.Sprintf("\tvar %s %s\n", arg.cname, ctype)
 		g += fmt.Sprintf("\t%s\n", marshal)
@@ -152,24 +157,27 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		if i == len(rets)-1 && returns {
 			break
 		}
-		ctype, cp := CType(ret.typ)
-		g += fmt.Sprintf("\tvar %s %sC.%s\n", ret.cname, cp, ctype)
+		if ret.dir == Out {
+			ctype, cp := CType(ret.typ)
+			g += fmt.Sprintf("\tvar %s %sC.%s\n", ret.cname, cp, ctype)
+		}
 	}
 	if flags.Throws {
 		g += "\tvar c_error *C.GError\n"
 	}
 	g += "\t"
 	if returns {
-		g += "c_retval := "
+		// TODO: catch and use errno here
+		g += "c_retval, _ := "
 	}
 
-	cgoLine := make([]string, 0)
+	gParamLine = make([]string, 0)
 	if owner != nil && flags.IsMethod {
 		switch owner.Type {
 			case Object:
-				cgoLine = append(cgoLine, fmt.Sprintf("self.As%s()", ownerName))
+				gParamLine = append(gParamLine, fmt.Sprintf("self.As%s()", ownerName))
 			case Struct:
-				cgoLine = append(cgoLine, "self.ptr")
+				gParamLine = append(gParamLine, "self.ptr")
 		}
 	}
 	for _, arg := range argsAndRets {
@@ -177,61 +185,51 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		if arg.dir == Out {
 			name = "&" + name
 		}
-		cgoLine = append(cgoLine, name)
+		gParamLine = append(gParamLine, name)
 	}
 	if flags.Throws {
-		cgoLine = append(cgoLine, "&c_error")
+		gParamLine = append(gParamLine, "&c_error")
 	}
-	g += fmt.Sprintf("C.gogi_%s(%s)\n", symbol, strings.Join(cgoLine, ", "))
+	g += fmt.Sprintf("C.gogi_%s(%s)\n", symbol, strings.Join(gParamLine, ", "))
 
 	for _, ret := range rets {
 		g += "\t" + ret.marshal + "\n"
 	}
-	if retc > 0 {
-		g += "\treturn "
-		for i, ret := range rets {
-			if i > 0 {
-				g += ", "
-			}
-			g += ret.name
+	if retc > 0 || flags.Throws {
+		gParamLine = make([]string, 0)
+		for _, ret := range rets {
+			gParamLine = append(gParamLine, ret.name)
 		}
-		// TODO: marshal the GError
 		if flags.Throws {
-			if retc > 0 {
-				g += ", "
-			}
-			g += "nil"
+			e := "GError{Code:(int)((*c_error).code), Message:C.GoString((*C.char)((*c_error).message))}"
+			g += "\tif c_error != nil {\n"
+			g += "\t\treturn " + strings.Join(append(gParamLine, e), ", ") + "\n"
+			g += "\t}\n"
+			g += "\treturn " + strings.Join(append(gParamLine, "nil"), ", ") + "\n"
+		} else {
+			g += "\treturn " + strings.Join(gParamLine, ", ") + "\n"
 		}
-		g += "\n"
 	}
 
-	// TODO: marshal return values back
-
-	// TODO: catch errno
 	c += "\t"
 	if returns {
 		c += "return "
 	}
-	c += info.GetSymbol() + "("
+	c += info.GetSymbol()
+
+	cParamLine = make([]string, 0)
 	if owner != nil && flags.IsMethod {
-		c += "self"
+		cParamLine = append(cParamLine, "self")
 	}
 
-	//c += strings.Join(c_argnames, ", ")
-	for i, arg := range argsAndRets {
-		if i > 0 || (owner != nil && flags.IsMethod) {
-			c += ", "
-		}
-		c += arg.name
+	for _, arg := range argsAndRets {
+		cParamLine = append(cParamLine, arg.name)
 	}
 
 	if flags.Throws {
-		if argc > 0 || flags.IsMethod {
-			c += ", "
-		}
-		c += "error"
+		cParamLine = append(cParamLine, "error")
 	}
-	c += ");\n"
+	c += "(" + strings.Join(cParamLine, ", ") + ");\n"
 
 	g += "}\n"
 	c += "}\n"

@@ -70,15 +70,16 @@ var cTypes = map[int]string {
 }
 
 // returns the C type and the necessary marshaling code
-func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, marshal string) {
+func MarshalToC(arg Argument) (ctype string, marshal string) {
+	typeInfo := arg.typ
+	cvar := arg.cname
 	govar := noKeywords(arg.name)
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
-		// do array stuff
 		switch typeInfo.GetArrayType() {
 			case C.GI_ARRAY_TYPE_C:
 				arg.name = govar + "_ar"
-				ar_ctype, _ := MarshalToC(typeInfo.GetParamType(0), arg, cvar + "_ar")
+				ar_ctype, _ := MarshalToC(Argument{typ:typeInfo.GetParamType(0), cname:cvar + "_ar", name:arg.name, dir:arg.dir})
 				ctype = "*" + ar_ctype
 				cvar_len := cvar + "_len"
 				cvar_val := cvar + "_val"
@@ -147,10 +148,27 @@ func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, mars
 	return
 }
 
-func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, marshal string) {
+func MarshalToGo(arg Argument) (gotype string, marshal string) {
+	typeInfo := arg.typ
+	govar := arg.name
+	cvar := arg.cname
 	tag := typeInfo.GetTag()
+	eq := ":="
+	if arg.dir == InOut {
+		eq = "="
+	}
 	if tag == ArrayTag {
-		// TODO: implement
+		var ptr string
+		arrayType := typeInfo.GetParamType(0)
+		gotype, ptr = GoType(arrayType)
+		gotype = "[]" + ptr + gotype
+		marshal = "// TODO: marshal"
+		switch typeInfo.GetArrayType() {
+			case C.GI_ARRAY_TYPE_C:
+			default:
+				// TODO: implement other array types
+				return "", ""
+		}
 	} else {
 		var ptr string
 		if typeInfo.IsPointer() {
@@ -166,15 +184,7 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 					marshal = fmt.Sprintf("%s = reflect.ValueOf(%s).Interface()", govar, cvar)
 				}
 			case C.GI_TYPE_TAG_BOOLEAN:
-				marshal = fmt.Sprintf("%s := %s != 0", govar, cvar)
-				/*
-				marshal = fmt.Sprintf("var %s %s\n", govar, gotype) +
-				          fmt.Sprintf("\tif %s == 0 {\n", cvar) +
-				          fmt.Sprintf("\t\t%s = false\n", govar) +
-				                      "\t} else {\n" +
-				          fmt.Sprintf("\t\t%s = true\n", govar) +
-				                      "\t}"
-						  */
+				marshal = fmt.Sprintf("%s %s %s != 0", govar, eq, cvar)
 			case C.GI_TYPE_TAG_INT8,
 			     C.GI_TYPE_TAG_INT16,
 			     C.GI_TYPE_TAG_INT32,
@@ -186,11 +196,11 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 			     C.GI_TYPE_TAG_FLOAT,
 			     C.GI_TYPE_TAG_DOUBLE,
 			     C.GI_TYPE_TAG_GTYPE,
-				 C.GI_TYPE_TAG_UNICHAR:
-				marshal = fmt.Sprintf("%s := (%s)(%s)", govar, gotype, cvar)
+			     C.GI_TYPE_TAG_UNICHAR:
+				marshal = fmt.Sprintf("%s %s (%s)(%s)", govar, eq, gotype, cvar)
 			case C.GI_TYPE_TAG_UTF8, C.GI_TYPE_TAG_FILENAME:
 				gotype = "string"
-				marshal = fmt.Sprintf("%s := C.GoString((*C.char)(%s))", govar, cvar)
+				marshal = fmt.Sprintf("%s %s C.GoString((*C.char)(%s))", govar, eq, cvar)
 			case C.GI_TYPE_TAG_INTERFACE:
 				interfaceInfo := typeInfo.GetTypeInterface()
 				name := interfaceInfo.GetName()
@@ -198,7 +208,7 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 					case Object:
 						//gotype = ptr + name
 						gotype = name
-						marshal = fmt.Sprintf("%s := &%s{C.as_%s((C.gpointer)(%s))}", govar, GetImplName(name), strings.ToLower(gotype), cvar)
+						marshal = fmt.Sprintf("%s %s &%s{C.as_%s((C.gpointer)(%s))}", govar, eq, GetImplName(name), strings.ToLower(gotype), cvar)
 					case Struct:
 						//gotype = ptr + name
 						gotype = "*" + name
@@ -206,13 +216,13 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 						if ptr == "" {
 							addr = "&"
 						}
-						marshal = fmt.Sprintf("%s := &%s{%s}", govar, name, addr + cvar)
+						marshal = fmt.Sprintf("%s %s &%s{%s}", govar, eq, name, addr + cvar)
 					default:
 						marshal = fmt.Sprintf("// TODO: marshal %d", interfaceInfo.Type)
 				}
 			case C.GI_TYPE_TAG_GLIST, C.GI_TYPE_TAG_GSLIST:
 				gotype = "*list.List"
-				marshal = fmt.Sprintf("%s := list.New()\n", govar) +
+				marshal = fmt.Sprintf("%s %s list.New()\n", govar, eq) +
 				          fmt.Sprintf("\tfor %s != nil {\n", cvar) +
 					  fmt.Sprintf("\t\t%s.PushBack(%s.data)\n", govar, cvar) +
 					  fmt.Sprintf("\t\t%s = %s.next\n", cvar, cvar) +
@@ -283,12 +293,8 @@ func CType(typeInfo *GiInfo) (string, string) {
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
 		// TODO: re-enable useful array functions
-		/*
-		ctype, p := CType(typeInfo.GetParamType(0), In)
-		println("array ctype:", ctype)
-		return ctype, p
-		*/
-		return "", ""
+		ctype, p := CType(typeInfo.GetParamType(0))
+		return ctype, "*" + p
 	} else {
 		val, ok := cTypes[(int)(tag)]
 		if ok {

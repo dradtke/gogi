@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"gogi"
+	"io/ioutil"
 	"path/filepath"
 	"os"
 	//"os/exec"
@@ -18,6 +19,7 @@ type Deps struct {
 }
 
 var knownPackages map[string] Deps
+var common string
 
 func CreatePackageRoot(pkg string) string {
 	root := filepath.Join("src/gi", pkg)
@@ -104,6 +106,7 @@ func Process(namespace string) {
 	// TODO: find a way to keep track of additional imports
 	//f.WriteString("import \"unsafe\"\n\n")
 	f.WriteString(go_code)
+	f.WriteString("\n" + common)
 	f.Close()
 
 	// now build it
@@ -123,16 +126,16 @@ func main() {
 		return
 	}
 
-	{
-		knownPackages = make(map[string]Deps)
-		deps_config, _ := os.Open("deps.json")
-		deps_decoder := json.NewDecoder(deps_config)
-		err := deps_decoder.Decode(&knownPackages)
-		if err != nil {
-			println(err.Error())
-		}
-		deps_config.Close()
+	var err error
+
+	knownPackages = make(map[string]Deps)
+	deps_config, _ := os.Open("deps.json")
+	deps_decoder := json.NewDecoder(deps_config)
+	err = deps_decoder.Decode(&knownPackages)
+	if err != nil {
+		println(err.Error())
 	}
+	deps_config.Close()
 
 	namespace := os.Args[1]
 	gogi.Init()
@@ -141,6 +144,15 @@ func main() {
 	if !loaded {
 		fmt.Printf("Failed to load namespace '%s'\n", namespace)
 		return
+	}
+
+	var commonBytes []byte
+	commonBytes, err = ioutil.ReadFile("misc/common.go")
+	if err != nil {
+		fmt.Println("Failed to read misc/common.go")
+		return
+	} else {
+		common = string(commonBytes)
 	}
 
 	/*

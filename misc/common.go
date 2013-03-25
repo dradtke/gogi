@@ -7,5 +7,5 @@ type GError struct {
 
 func (self GError) Error() string {
 	// ???: include error code?
-	return Message
+	return self.Message
 }
