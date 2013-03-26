@@ -69,7 +69,7 @@ var cTypes = map[int]string {
 
 // returns the C type and the necessary marshaling code
 func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, marshal string) {
-	govar := arg.name
+	govar := noKeywords(arg.name)
 
 	dir := arg.info.GetDirection()
 	ref := refOut(dir)
