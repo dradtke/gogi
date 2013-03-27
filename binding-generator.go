@@ -14,6 +14,7 @@ type Deps struct {
 	Pkgs []string
 	Headers []string
 	Typedefs map[string]string
+	Imports []string
 }
 
 var knownPackages map[string]Deps
@@ -85,10 +86,13 @@ func Process(namespace string) {
 			f.WriteString(fmt.Sprintf("#define %s %s\n", key, value))
 		}
 		f.WriteString("\n")
-		f.WriteString("GList *empty_glist = NULL;\n")
+		f.WriteString("GList *EMPTY_GLIST = NULL;\n")
 	}
 	f.WriteString(c_code + "\n")
 	f.WriteString("*/\nimport \"C\"\n")
+	for _, imp := range deps.Imports {
+		f.WriteString(fmt.Sprintf("import \"%s\"\n", imp))
+	}
 	// TODO: find a way to keep track of additional imports
 	//f.WriteString("import \"unsafe\"\n\n")
 	f.WriteString(go_code)
@@ -115,7 +119,10 @@ func main() {
 	knownPackages = make(map[string]Deps)
 	deps_config, _ := os.Open("deps.json")
 	deps_decoder := json.NewDecoder(deps_config)
-	deps_decoder.Decode(&knownPackages)
+	err := deps_decoder.Decode(&knownPackages)
+	if err != nil {
+		println(err.Error())
+	}
 	deps_config.Close()
 
 	namespace := os.Args[1]

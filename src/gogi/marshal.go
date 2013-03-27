@@ -5,7 +5,7 @@ package gogi
 #include <glib.h>
 #include <girepository.h>
 
-GList *empty_glist = NULL;
+GList *EMPTY_GLIST = NULL;
 
 char *from_gchar(gchar *str) { return (char*)str; }
 gchar *to_gchar(char *str) { return (gchar*)str; }
@@ -20,7 +20,7 @@ import (
 	"container/list"
 	"fmt"
 	"reflect"
-	"strings"
+	//"strings"
 )
 
 var goTypes = map[int]string {
@@ -80,27 +80,28 @@ func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, mars
 	if tag == ArrayTag {
 		// do array stuff
 		switch typeInfo.GetArrayType() {
-		case C.GI_ARRAY_TYPE_C:
-			arg.name = govar + "_ar"
-			ar_ctype, _ := MarshalToC(typeInfo.GetParamType(0), arg, cvar + "_ar")
-			ctype = "*" + ar_ctype
-			cvar_len := cvar + "_len"
-			cvar_val := cvar + "_val"
-			marshal = cvar_len + " := len(" + ref + govar + ")\n\t" +
-			          cvar_val + " := make([]" + ar_ctype + ", " + cvar_len + ")\n\t" +
-			          "for i := 0; i < " + cvar_len + "; i++ {\n\t" +
-					  "\t" + cvar_val + "[i] = (*C.gchar)(C.CString((" + ref + govar + ")[i]))\n\t" +
-					  "}\n\t" +
-					  cvar + " = (" + ref + ar_ctype + ")(unsafe.Pointer(&" + cvar_val + "))"
+			case C.GI_ARRAY_TYPE_C:
+				arg.name = govar + "_ar"
+				ar_ctype, _ := MarshalToC(typeInfo.GetParamType(0), arg, cvar + "_ar")
+				ctype = "*" + ar_ctype
+				cvar_len := cvar + "_len"
+				cvar_val := cvar + "_val"
+				marshal = cvar_len + " := len(" + ref + govar + ")\n\t" +
+				          cvar_val + " := make([]" + ar_ctype + ", " + cvar_len + ")\n\t" +
+				          "for i := 0; i < " + cvar_len + "; i++ {\n\t" +
+						  "\t" + cvar_val + "[i] = (*C.gchar)(C.CString((" + ref + govar + ")[i]))\n\t" +
+						  "}\n\t" +
+						  cvar + " = (" + ref + ar_ctype + ")(unsafe.Pointer(&" + cvar_val + "))"
 		}
 	} else {
 		var p string
-		ctype, p = CType(typeInfo, dir)
+		ctype, p = CType(typeInfo)
 		ctype = p + "C." + ctype
 		switch tag {
 			case C.GI_TYPE_TAG_VOID:
-				if strings.HasSuffix(ctype, "C.gpointer") {
+				if ctype == "C.gpointer" {
 					marshal = "// TODO: marshal gpointer"
+					marshal = fmt.Sprintf("%s = (C.gpointer)(reflect.ValueOf(%s).Pointer())", cvar, ref + govar)
 				}
 			case C.GI_TYPE_TAG_BOOLEAN:
 				marshal = "var " + cvar + " " + ctype + "\n\t" +
@@ -119,7 +120,8 @@ func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, mars
 			     C.GI_TYPE_TAG_UINT64,
 			     C.GI_TYPE_TAG_FLOAT,
 			     C.GI_TYPE_TAG_DOUBLE,
-			     C.GI_TYPE_TAG_GTYPE:
+			     C.GI_TYPE_TAG_GTYPE,
+				 C.GI_TYPE_TAG_UNICHAR:
 				marshal = fmt.Sprintf("%s = (%s)(%s)", cvar, ctype, ref + govar)
 			case C.GI_TYPE_TAG_UTF8, C.GI_TYPE_TAG_FILENAME:
 				marshal = fmt.Sprintf("%s = (%s)(C.CString(%s))", cvar, ctype, ref + govar)
@@ -170,7 +172,8 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 			     C.GI_TYPE_TAG_UINT64,
 			     C.GI_TYPE_TAG_FLOAT,
 			     C.GI_TYPE_TAG_DOUBLE,
-			     C.GI_TYPE_TAG_GTYPE:
+			     C.GI_TYPE_TAG_GTYPE,
+				 C.GI_TYPE_TAG_UNICHAR:
 				marshal = fmt.Sprintf("%s := (%s)(%s)", govar, gotype, cvar)
 			case C.GI_TYPE_TAG_UTF8, C.GI_TYPE_TAG_FILENAME:
 				gotype = "string"
@@ -180,13 +183,18 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 				switch interfaceInfo.Type {
 					case Object:
 						gotype = "*" + interfaceInfo.GetName()
-						//marshal = "// marshal?"
+						// TODO: marshal this
 						marshal = fmt.Sprintf("%s := nil", govar)
+					case Struct:
+						// TODO: marshal this
+						marshal = fmt.Sprintf("%s := nil", govar)
+					default:
+						marshal = fmt.Sprintf("// TODO: marshal %d", interfaceInfo.Type)
 				}
 			case C.GI_TYPE_TAG_GLIST, C.GI_TYPE_TAG_GSLIST:
 				gotype = "*list.List"
 				marshal = fmt.Sprintf("%s := list.New()\n", govar) +
-				          fmt.Sprintf("\tfor %s != C.empty_glist {\n", cvar) +
+				          fmt.Sprintf("\tfor %s != C.EMPTY_GLIST {\n", cvar) +
 					  fmt.Sprintf("\t\t%s.PushBack(%s.data)\n", govar, cvar) +
 					  fmt.Sprintf("\t\t%s = %s.next\n", cvar, cvar) +
 					  fmt.Sprintf("\t}\n")
@@ -197,18 +205,21 @@ func MarshalToGo(typeInfo *GiInfo, govar string, cvar string) (gotype string, ma
 	return
 }
 
-func GoType(typeInfo *GiInfo, dir Direction) (string, string) {
+func GoType(typeInfo *GiInfo) (string, string) {
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
-		gotype, p := GoType(typeInfo.GetParamType(0), In)
+		gotype, p := GoType(typeInfo.GetParamType(0))
 		return "[]" + gotype, p
 		//return (refOut(dir) + "[]" + GoType(typeInfo.GetParamType(0), In))
 	} else {
-		ptr := refPointer(typeInfo, dir)
+		var ptr string
+		if typeInfo.IsPointer() {
+			ptr = "*"
+		}
 		val, ok := goTypes[(int)(tag)]
 		if ok {
 			if val == "" && ptr != "" {
-				return "gpointer", ptr[1:]
+				return "interface{}", ptr[1:]
 			} else if val == "string" && ptr != "" {
 				return val, ptr[1:]
 			}
@@ -227,16 +238,24 @@ func GoType(typeInfo *GiInfo, dir Direction) (string, string) {
 	//return "<MISSING GOTYPE: " + TypeTagToString(tag) + ">", ""
 }
 
-func CType(typeInfo *GiInfo, dir Direction) (string, string) {
-	ptr := refPointer(typeInfo, dir)
+func CType(typeInfo *GiInfo) (string, string) {
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
+		// TODO: re-enable useful array functions
+		/*
 		ctype, p := CType(typeInfo.GetParamType(0), In)
+		println("array ctype:", ctype)
 		return ctype, p
+		*/
+		return "", ""
 	} else {
+		var ptr string
+		if typeInfo.IsPointer() {
+			ptr = "*"
+		}
 		val, ok := cTypes[(int)(tag)]
 		if ok {
-			if val == "void" && ptr != "" {
+			if tag == C.GI_TYPE_TAG_VOID && ptr != "" {
 				return "gpointer", ptr[1:]
 			} else {
 				return val, ptr
@@ -435,7 +454,7 @@ func GlibString(str string) *C.gchar {
 
 func GListToGo(glist *C.GList) *list.List {
 	result := list.New()
-	for glist != C.empty_glist {
+	for glist != C.EMPTY_GLIST {
 		result.PushBack(glist.data)
 		glist = glist.next
 	}
@@ -457,7 +476,8 @@ func refOut(dir Direction) string {
 }
 
 func refPointer(typeInfo *GiInfo, dir Direction) string {
-	ptr := refOut(dir)
+	var ptr string
+	//ptr := refOut(dir)
 	if typeInfo.IsPointer() {
 		ptr += "*"
 	}

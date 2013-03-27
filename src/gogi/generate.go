@@ -12,14 +12,38 @@ type Argument struct {
 	typ *GiInfo
 }
 
+var functionBlacklist []string = []string {
+	"g_ascii_strtod",
+	"g_atomic_pointer_compare_and_exchange",
+	"g_atomic_pointer_set",
+	"g_filename_from_uri",
+	"g_get_charset",
+	"g_get_filename_charsets",
+	"g_once_init_enter",
+	"g_strfreev",
+	"g_strjoinv",
+	"g_strtod",
+	"g_strv_get_type",
+	"g_strv_length",
+	"g_unix_error_quark",
+	"g_variant_get_gtype",
+	"g_variant_parse",
+	"g_variant_type_string_scan",
+	"g_variant_type_checked_",
+}
+
 // return a marshaled Go function and any necessary C wrapper
 func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	if info.IsDeprecated() {
 		return
 	}
 
-	flags := info.GetFunctionFlags()
 	symbol := info.GetSymbol()
+	if contains(symbol, functionBlacklist) {
+		return
+	}
+
+	flags := info.GetFunctionFlags()
 	argc := info.GetNArgs()
 
 	g += "func "
@@ -31,7 +55,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 
 	returnType := info.GetReturnType() ; defer returnType.Free()
 	{
-		ctype, cp := CType(returnType, In)
+		ctype, cp := CType(returnType)
 		if ctype == "" {
 			g = ""; c = ""
 			return
@@ -62,8 +86,12 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		arg := info.GetArg(i)
 		dir := arg.GetDirection()
 		args[i] = Argument{arg,arg.GetName(),"",arg.GetType()}
-		gotype, gp := GoType(args[i].typ, dir)
-		ctype, cp := CType(args[i].typ, dir)
+		gotype, gp := GoType(args[i].typ)
+		ctype, cp := CType(args[i].typ)
+		if dir == Out || dir == InOut {
+			cp += "*"
+			gp += "*"
+		}
 		if gotype == "" || ctype == "" {
 			g = ""; c = ""
 			return
@@ -144,7 +172,10 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	c += strings.Join(c_argnames, ", ")
 	if flags.Throws {
 		// TODO: catch the error, don't just pass in null
-		c += ", NULL"
+		if argc > 0 {
+			c += ", "
+		}
+		c += "NULL"
 	}
 	c += ");\n"
 
@@ -236,4 +267,13 @@ func noKeywords(name string) string {
 		case "type": return "typ"
 	}
 	return name
+}
+
+func contains(elem string, blacklist []string) bool {
+	for _, x := range blacklist {
+		if x == elem {
+			return true
+		}
+	}
+	return false
 }

@@ -1,4 +1,10 @@
 {
+	"GLib": {
+		"Pkgs"    : ["glib-2.0"],
+		"Headers" : ["glib.h", "glib/gstdio.h"],
+		"Typedefs": {},
+		"Imports" : ["reflect"]
+	},
 	"Gtk" : {
 		"Pkgs"    : ["gtk+-3.0", "cairo"],
 		"Headers" : ["gtk/gtk.h", "cairo.h"],
@@ -6,6 +12,7 @@
 			"CairoRegion": "cairo_region_t",
 			"CairoContext": "cairo_t",
 			"CairoRectangleInt": "cairo_rectangle_int_t"
-		}
+		},
+		"Imports" : []
 	}
 }
