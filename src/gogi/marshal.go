@@ -107,8 +107,7 @@ func MarshalToC(typeInfo *GiInfo, arg Argument, cvar string) (ctype string, mars
 					marshal = fmt.Sprintf("%s = (C.gpointer)(reflect.ValueOf(%s).Pointer())", cvar, ref + govar)
 				}
 			case C.GI_TYPE_TAG_BOOLEAN:
-				marshal = "var " + cvar + " " + ctype + "\n\t" +
-				          "if " + (ref + govar) + " {\n\t" +
+				marshal = "if " + (ref + govar) + " {\n\t" +
 					  "\t" + cvar + " = 1\n\t" +
 					  "} else {\n\t" +
 					  "\t" + cvar + " = 0\n\t" +

@@ -37,13 +37,22 @@ var functionBlacklist []string = []string {
 	"g_once_init_leave",
 	"g_trash_stack_height",
 	"g_trash_stack_push",
-	"g_ascii_strtoull",
 	"g_assert_warning",
 	"g_atomic_pointer_add",
 	"g_atomic_pointer_and",
 	"g_atomic_pointer_or",
 	"g_atomic_pointer_xor",
 	"g_datalist_clear",
+	"g_ascii_strtoll",
+	"g_ascii_strtoull",
+	"g_datalist_init",
+	"g_datalist_set_flags",
+	"g_datalist_get_flags",
+	"g_datalist_unset_flags",
+	"g_pointer_bit_lock",
+	"g_pointer_bit_trylock",
+	"g_pointer_bit_unlock",
+	"g_bytes_unref_to_data",
 }
 
 var structBlacklist []string = []string {
@@ -51,6 +60,15 @@ var structBlacklist []string = []string {
 	"Variant",
 	"VariantType",
 	"TestLogMsg",
+	"Mutex",
+	"KeyFileFlags",
+	"TraverseFlags",
+	"RegexCompileFlags",
+	"RegexMatchFlags",
+	"FormatSizeFlags",
+	"IOCondition",
+	"LogLevelFlags",
+	"TestTrapFlags",
 }
 
 var objectBlacklist []string = []string {
