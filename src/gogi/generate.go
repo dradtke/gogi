@@ -77,6 +77,9 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		gParamLine = append(gParamLine, gArg)
 	}
 
+	arrayArgs := make([]*GiInfo, 0) // so we can ignore array length parameters
+	var arrayLengthMarshal string
+
 	args := make([]Argument, 0)
 	rets := make([]Argument, 0)
 	argsAndRets := make([]Argument, 0)
@@ -91,8 +94,13 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 			return "", ""
 		}
 
+		array_length := typ.GetArrayLength()
+		if array_length != -1 {
+			arrayArgs = append(arrayArgs, arg)
+		}
+
 		name := arg.GetName()
-		if symbol == "g_base64_decode_inplace" && name == "text" {
+		if symbol == "gtk_init" && name == "argv" {
 			fmt.Printf("%s (%s):\n", name, TypeTagToString(typ.GetTag()))
 			fmt.Printf("direction: %d\n", dir)
 			fmt.Printf("caller allocates: %t\n", arg.IsCallerAllocates())
@@ -101,13 +109,15 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 			fmt.Printf("may be null: %t\n", arg.MayBeNull())
 			fmt.Printf("ownership transfer: %d\n", arg.GetOwnershipTransfer())
 			fmt.Printf("is pointer: %t\n", arg.GetType().IsPointer())
+			fmt.Printf("array length: %d\n", arg.GetType().GetArrayLength())
+			fmt.Printf("array fixed size: %d\n", arg.GetType().GetArrayFixedSize())
 			fmt.Println()
 		}
 		newArg := Argument{arg,arg.GetType(),dir,name,"c_"+name,""}
 		argsAndRets = append(argsAndRets, newArg)
 		if dir == In {
 			args = append(args, newArg)
-			if ctype == "gchar" && cp != "" && typ.GetTag() != ArrayTag {
+			if needsConst(arg, typ, ctype, cp) {
 				ctype = "const " + ctype
 			}
 			gParamLine = append(gParamLine, fmt.Sprintf("%s %s", noKeywords(name), gp + gotype))
@@ -123,6 +133,14 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 			gParamLine = append(gParamLine, fmt.Sprintf("%s %s", noKeywords(name), gp + gotype))
 			cParamLine = append(cParamLine, fmt.Sprintf("%s %s", ctype, cp + name))
 		}
+	}
+	var arrayArgOffset int
+	for _, arg := range arrayArgs {
+		// TODO: update this if methods actually become invoked from the object
+		a := arg.GetType().GetArrayLength() + 1 - arrayArgOffset
+		arrayLengthMarshal += fmt.Sprintf("\t%s := len(%s)\n", info.GetArg(a-1).GetName(), arg.GetName())
+		gParamLine = append(gParamLine[:a], gParamLine[a+1:]...)
+		arrayArgOffset++
 	}
 	if flags.Throws {
 		cParamLine = append(cParamLine, "GError **error")
@@ -160,6 +178,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	c += "{\n"
 
 	// marshal
+	g += arrayLengthMarshal
 	for _, arg := range args {
 		ctype, marshal := MarshalToC(arg)
 		// TODO: remove the check for "C.", it shouldn't be needed
@@ -403,4 +422,8 @@ func castFunc(prefix, n string, c *string) string {
 		(*c) += "}\n"
 	}
 	return name
+}
+
+func needsConst(arg *GiInfo, typ *GiInfo, ctype, cp string) bool {
+	return (ctype == "gchar") && (cp != "") && (typ.GetTag() != ArrayTag) && (!arg.MayBeNull())
 }

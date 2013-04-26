@@ -59,7 +59,7 @@ var cTypes = map[int]string {
 	(int)(C.GI_TYPE_TAG_UINT64):   "guint64",
 	(int)(C.GI_TYPE_TAG_FLOAT):    "gfloat",
 	(int)(C.GI_TYPE_TAG_DOUBLE):   "gdouble",
-	(int)(C.GI_TYPE_TAG_GTYPE):    "gint",
+	(int)(C.GI_TYPE_TAG_GTYPE):    "GType",
 	(int)(C.GI_TYPE_TAG_UTF8):     "gchar",
 	(int)(C.GI_TYPE_TAG_FILENAME): "gchar",
 	// skip a couple
@@ -242,7 +242,7 @@ func GoType(typeInfo *GiInfo) (string, string) {
 	tag := typeInfo.GetTag()
 	if tag == ArrayTag {
 		gotype, p := GoType(typeInfo.GetParamType(0))
-		return "[]" + gotype, p
+		return gotype, "[]" + p
 		//return (refOut(dir) + "[]" + GoType(typeInfo.GetParamType(0), In))
 	} else {
 		val, ok := goTypes[(int)(tag)]
