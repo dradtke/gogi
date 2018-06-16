@@ -1,8 +1,8 @@
 package main
 
 import (
-	"gogi"
 	"fmt"
+	"gogi"
 	"os"
 	"strings"
 )
