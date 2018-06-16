@@ -5,30 +5,31 @@ import (
 	"fmt"
 	"gogi"
 	"io/ioutil"
-	"path/filepath"
 	"os"
+	"path/filepath"
 	//"os/exec"
 	"strings"
 )
 
 type Deps struct {
-	Pkgs []string
-	Headers []string
+	Pkgs     []string
+	Headers  []string
 	Typedefs map[string]string
-	Imports []string
+	Imports  []string
 }
 
-var knownPackages map[string] Deps
+var knownPackages map[string]Deps
 var common string
 
 func CreatePackageRoot(pkg string) string {
 	root := filepath.Join("src/gi", pkg)
-	os.Remove(root) ; os.MkdirAll(root, os.ModePerm)
+	os.Remove(root)
+	os.MkdirAll(root, os.ModePerm)
 	return root
 }
 
 func OpenSourceFile(root, pkg string) *os.File {
-	f, _ := os.Create(filepath.Join(root, pkg + ".go"))
+	f, _ := os.Create(filepath.Join(root, pkg+".go"))
 	return f
 }
 
@@ -45,39 +46,43 @@ func Process(namespace string) {
 		}
 		var g, c string
 		switch info.Type {
-			case gogi.Object:
-				g, c = gogi.WriteObject(info)
-			case gogi.Struct:
-				g, c = gogi.WriteStruct(info)
-			case gogi.Enum, gogi.Flags:
-				g, c = gogi.WriteEnum(info)
-			case gogi.Function:
-				g, c = gogi.WriteFunction(info, nil)
-			default:
-				//fmt.Printf("unknown info '%s' of type %s\n", info.GetName(), gogi.InfoTypeToString(info.Type))
+		case gogi.Object:
+			g, c = gogi.WriteObject(info)
+		case gogi.Struct:
+			g, c = gogi.WriteStruct(info)
+		case gogi.Enum, gogi.Flags:
+			g, c = gogi.WriteEnum(info)
+		case gogi.Function:
+			g, c = gogi.WriteFunction(info, nil)
+		default:
+			//fmt.Printf("unknown info '%s' of type %s\n", info.GetName(), gogi.InfoTypeToString(info.Type))
 		}
 
 		/*
-		if info.Type == gogi.Object {
-			switch info.GetName() {
-				case "Window", "Bin", "Container", "Widget", "InitiallyUnowned", "Object":
-					g, c := gogi.WriteObject(info)
-					go_code += g + "\n"
-					if c != "" {
-						c_code += c + "\n"
-					}
+			if info.Type == gogi.Object {
+				switch info.GetName() {
+					case "Window", "Bin", "Container", "Widget", "InitiallyUnowned", "Object":
+						g, c := gogi.WriteObject(info)
+						go_code += g + "\n"
+						if c != "" {
+							c_code += c + "\n"
+						}
+				}
+			} else if info.Type == gogi.Enum {
+				g, c := gogi.WriteEnum(info)
+				go_code += g + "\n"
+				if c != "" {
+					c_code += c + "\n"
+				}
 			}
-		} else if info.Type == gogi.Enum {
-			g, c := gogi.WriteEnum(info)
-			go_code += g + "\n"
-			if c != "" {
-				c_code += c + "\n"
-			}
-		}
 		*/
 
-		if g != "" { go_code += g + "\n" }
-		if c != "" { c_code += c + "\n" }
+		if g != "" {
+			go_code += g + "\n"
+		}
+		if c != "" {
+			c_code += c + "\n"
+		}
 	}
 
 	pkg := strings.ToLower(namespace)
@@ -111,12 +116,12 @@ func Process(namespace string) {
 
 	// now build it
 	/*
-	println("Compiling...")
-	cmd := exec.Command("go", "install", pkg)
-	err = cmd.Run()
-	if err != nil {
-		println(err.Error())
-	}
+		println("Compiling...")
+		cmd := exec.Command("go", "install", pkg)
+		err = cmd.Run()
+		if err != nil {
+			println(err.Error())
+		}
 	*/
 }
 
@@ -156,13 +161,13 @@ func main() {
 	}
 
 	/*
-	dependencies := gogi.GetDependencies(namespace)
-	for _, dep := range dependencies {
-		nameAndVersion := strings.Split(dep, "-")
-		name := nameAndVersion[0]
-		//version := nameAndVersion[1]
-		Process(name)
-	}
+		dependencies := gogi.GetDependencies(namespace)
+		for _, dep := range dependencies {
+			nameAndVersion := strings.Split(dep, "-")
+			name := nameAndVersion[0]
+			//version := nameAndVersion[1]
+			Process(name)
+		}
 	*/
 
 	Process(namespace)

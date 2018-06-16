@@ -6,11 +6,11 @@ import (
 )
 
 type Argument struct {
-	info *GiInfo
-	typ *GiInfo
-	dir Direction
-	name string
-	cname string
+	info    *GiInfo
+	typ     *GiInfo
+	dir     Direction
+	name    string
+	cname   string
 	marshal string
 }
 
@@ -31,9 +31,12 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	for i := 0; i < argAndRetc; i++ {
 		dir := info.GetArg(i).GetDirection()
 		switch dir {
-			case In: // default, do nothing
-			case Out: argc-- ; retc++
-			case InOut: retc++
+		case In: // default, do nothing
+		case Out:
+			argc--
+			retc++
+		case InOut:
+			retc++
 		}
 	}
 
@@ -45,12 +48,13 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 
 	g += "func "
 
-	returnType := info.GetReturnType() ; defer returnType.Free()
+	returnType := info.GetReturnType()
+	defer returnType.Free()
 	{
 		ctype, cp := CType(returnType)
 		if ctype == "" {
 			return "", ""
-		} else if (ctype == "gchar" && cp != "" && returnType.GetTag() != ArrayTag) {
+		} else if ctype == "gchar" && cp != "" && returnType.GetTag() != ArrayTag {
 			// ???: add this for arrays or not?
 			ctype = "const " + ctype
 		}
@@ -68,7 +72,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	gParamLine := make([]string, 0)
 
 	if owner != nil && flags.IsMethod {
-		cParamLine = append(cParamLine, prefix + ownerName + " *self")
+		cParamLine = append(cParamLine, prefix+ownerName+" *self")
 		gArg := "self "
 		if owner.Type == Struct {
 			gArg += "*"
@@ -113,25 +117,25 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 			fmt.Printf("array fixed size: %d\n", arg.GetType().GetArrayFixedSize())
 			fmt.Println()
 		}
-		newArg := Argument{arg,arg.GetType(),dir,name,"c_"+name,""}
+		newArg := Argument{arg, arg.GetType(), dir, name, "c_" + name, ""}
 		argsAndRets = append(argsAndRets, newArg)
 		if dir == In {
 			args = append(args, newArg)
 			if needsConst(arg, typ, ctype, cp) {
 				ctype = "const " + ctype
 			}
-			gParamLine = append(gParamLine, fmt.Sprintf("%s %s", noKeywords(name), gp + gotype))
-			cParamLine = append(cParamLine, fmt.Sprintf("%s %s", ctype, cp + name))
+			gParamLine = append(gParamLine, fmt.Sprintf("%s %s", noKeywords(name), gp+gotype))
+			cParamLine = append(cParamLine, fmt.Sprintf("%s %s", ctype, cp+name))
 		} else if dir == Out {
 			rets = append(rets, newArg)
 			cp += "*"
-			cParamLine = append(cParamLine, fmt.Sprintf("%s %s", ctype, cp + name))
+			cParamLine = append(cParamLine, fmt.Sprintf("%s %s", ctype, cp+name))
 		} else if dir == InOut {
 			args = append(args, newArg)
 			rets = append(rets, newArg)
 			cp += "*"
-			gParamLine = append(gParamLine, fmt.Sprintf("%s %s", noKeywords(name), gp + gotype))
-			cParamLine = append(cParamLine, fmt.Sprintf("%s %s", ctype, cp + name))
+			gParamLine = append(gParamLine, fmt.Sprintf("%s %s", noKeywords(name), gp+gotype))
+			cParamLine = append(cParamLine, fmt.Sprintf("%s %s", ctype, cp+name))
 		}
 	}
 	var arrayArgOffset int
@@ -151,7 +155,7 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	var returns bool
 	if returnType.GetTag() != VoidTag || returnType.IsPointer() {
 		retc++
-		rets = append(rets, Argument{nil,returnType,In,"retval","c_retval",""})
+		rets = append(rets, Argument{nil, returnType, In, "retval", "c_retval", ""})
 		returns = true
 	}
 
@@ -196,9 +200,9 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 		if ret.dir == Out {
 			ctype, cp := CType(ret.typ)
 			/*
-			if ret.info.IsCallerAllocates() && cp != "" {
-				cp = cp[1:]
-			}
+				if ret.info.IsCallerAllocates() && cp != "" {
+					cp = cp[1:]
+				}
 			*/
 			g += fmt.Sprintf("\tvar %s %sC.%s\n", ret.cname, cp, ctype)
 		}
@@ -215,10 +219,10 @@ func WriteFunction(info *GiInfo, owner *GiInfo) (g string, c string) {
 	gParamLine = make([]string, 0)
 	if owner != nil && flags.IsMethod {
 		switch owner.Type {
-			case Object:
-				gParamLine = append(gParamLine, fmt.Sprintf("self.As%s()", ownerName))
-			case Struct:
-				gParamLine = append(gParamLine, "self.ptr")
+		case Object:
+			gParamLine = append(gParamLine, fmt.Sprintf("self.As%s()", ownerName))
+		case Struct:
+			gParamLine = append(gParamLine, "self.ptr")
 		}
 	}
 	for _, arg := range argsAndRets {
@@ -293,7 +297,7 @@ func WriteStruct(info *GiInfo) (g string, c string) {
 	prefix := GetPrefix(info)
 
 	g += fmt.Sprintf("type %s struct {\n", name)
-	g += fmt.Sprintf("\tptr *C.%s\n", prefix + name)
+	g += fmt.Sprintf("\tptr *C.%s\n", prefix+name)
 	g += "}\n"
 
 	// do its methods
@@ -328,21 +332,21 @@ func WriteObject(info *GiInfo) (g string, c string) {
 
 	// interface
 	g += fmt.Sprintf("type %s interface {\n", name)
-	g += fmt.Sprintf("\tAs%s() *C.%s\n", name, prefix + name)
+	g += fmt.Sprintf("\tAs%s() *C.%s\n", name, prefix+name)
 	g += "}\n"
 
 	// implementation
 	// ???: does it matter if it's abstract?
 	implName := GetImplName(name)
 	g += fmt.Sprintf("type %s struct {\n", implName)
-	g += fmt.Sprintf("\tptr *C.%s\n", prefix + name)
+	g += fmt.Sprintf("\tptr *C.%s\n", prefix+name)
 	g += "}\n"
 
 	// ???: do this for abstract types?
 	for {
-		if !blacklist[prefix + name] {
+		if !blacklist[prefix+name] {
 			cast := castFunc(prefix, name, &c)
-			g += fmt.Sprintf("func (ob %s) As%s() *C.%s {\n", implName, name, prefix + name)
+			g += fmt.Sprintf("func (ob %s) As%s() *C.%s {\n", implName, name, prefix+name)
 			g += fmt.Sprintf("\treturn C.%s((C.gpointer)(ob.ptr))\n", cast)
 			g += "}\n"
 		}
@@ -353,7 +357,8 @@ func WriteObject(info *GiInfo) (g string, c string) {
 		// workaround for this sometimes being written out twice
 		oldName := name
 		for name == oldName {
-			iter = iter.GetParent() ; defer iter.Free()
+			iter = iter.GetParent()
+			defer iter.Free()
 			name = iter.GetName()
 		}
 	}
@@ -387,7 +392,8 @@ func WriteEnum(info *GiInfo) (g string, c string) {
 
 	value_count := info.GetNEnumValues()
 	for i := 0; i < value_count; i++ {
-		value := info.GetEnumValue(i) ; defer value.Free()
+		value := info.GetEnumValue(i)
+		defer value.Free()
 		// ???: how to avoid name clashes?
 		g += fmt.Sprintf("\t%s = %d\n", enumValueName(name, CamelCase(value.GetName())), value.GetValue())
 	}
@@ -399,10 +405,14 @@ func WriteEnum(info *GiInfo) (g string, c string) {
 // Some argument names overlap with Go keywords; use this method to rename them
 func noKeywords(name string) string {
 	switch name {
-		case "type": return "typ"
-		case "func": return "fun"
-		case "len": return "length"
-		case "string": return "str"
+	case "type":
+		return "typ"
+	case "func":
+		return "fun"
+	case "len":
+		return "length"
+	case "string":
+		return "str"
 	}
 	return name
 }
@@ -417,8 +427,8 @@ func castFunc(prefix, n string, c *string) string {
 	name := "as_" + strings.ToLower(n)
 	if !cExports[name] {
 		cExports[name] = true
-		(*c) += fmt.Sprintf("%s *%s(gpointer ob) {\n", prefix + n, name)
-		(*c) += fmt.Sprintf("\treturn (%s*)ob;\n", prefix + n)
+		(*c) += fmt.Sprintf("%s *%s(gpointer ob) {\n", prefix+n, name)
+		(*c) += fmt.Sprintf("\treturn (%s*)ob;\n", prefix+n)
 		(*c) += "}\n"
 	}
 	return name

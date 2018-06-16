@@ -53,17 +53,18 @@ import (
 	//"fmt"
 	//"reflect"
 	"io/ioutil"
-	"strings"
 	"path/filepath"
+	"strings"
 )
 
-var cExports map[string] bool
+var cExports map[string]bool
 var cNamespace string
 var prefixes map[string]string
-var blacklist map[string] bool
+var blacklist map[string]bool
 
 func LoadNamespace(namespace string) bool {
-	_namespace := GlibString(namespace) ; defer C.g_free((C.gpointer)(_namespace))
+	_namespace := GlibString(namespace)
+	defer C.g_free((C.gpointer)(_namespace))
 	success := GoBool(C.load_namespace(_namespace))
 	if success {
 		cExports = make(map[string]bool)
@@ -102,20 +103,22 @@ func GetDependencies(namespace string) []string {
 	if namespace == "GLib" {
 		return make([]string, 0)
 	}
-	_namespace := GlibString(namespace) ; defer C.g_free((C.gpointer)(_namespace))
+	_namespace := GlibString(namespace)
+	defer C.g_free((C.gpointer)(_namespace))
 	raw_list := GListToGo(C.get_dependencies(_namespace))
 	results := make([]string, raw_list.Len())
-	for i, e := 0, raw_list.Front(); e != nil; i, e = i + 1, e.Next() {
+	for i, e := 0, raw_list.Front(); e != nil; i, e = i+1, e.Next() {
 		results[i] = C.GoString((*C.char)(e.Value.(C.gpointer)))
 	}
 	return results
 }
 
 func GetInfos(namespace string) []*GiInfo {
-	_namespace := GlibString(namespace) ; defer C.g_free((C.gpointer)(_namespace))
+	_namespace := GlibString(namespace)
+	defer C.g_free((C.gpointer)(_namespace))
 	raw_list := GListToGo(C.get_infos(_namespace))
 	results := make([]*GiInfo, raw_list.Len())
-	for i, e := 0, raw_list.Front(); e != nil; i, e = i + 1, e.Next() {
+	for i, e := 0, raw_list.Front(); e != nil; i, e = i+1, e.Next() {
 		ptr := (*C.GIBaseInfo)(e.Value.(C.gpointer))
 		results[i] = NewGiInfo(ptr)
 	}
@@ -123,8 +126,10 @@ func GetInfos(namespace string) []*GiInfo {
 }
 
 func GetInfoByName(namespace, symbol string) *GiInfo {
-	_namespace := GlibString(namespace) ; defer C.g_free((C.gpointer)(_namespace))
-	_symbol := GlibString(symbol) ; defer C.g_free((C.gpointer)(_symbol))
+	_namespace := GlibString(namespace)
+	defer C.g_free((C.gpointer)(_namespace))
+	_symbol := GlibString(symbol)
+	defer C.g_free((C.gpointer)(_symbol))
 	ptr := (*C.GIBaseInfo)(C.g_irepository_find_by_name(nil, _namespace, _symbol))
 	if ptr == nil {
 		return nil
